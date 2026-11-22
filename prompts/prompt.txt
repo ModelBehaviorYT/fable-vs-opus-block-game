@@ -1,0 +1,23 @@
+Make Minecraft as a 3D game that runs in my web browser. It should feel like the real Minecraft, as close as you can get it, and like a finished game, not a prototype.
+
+The complete game:
+- Title screen with a menu: Singleplayer (create a new world with a name and a seed, or load a saved one), Options, Quit.
+- An infinite, randomly generated block world from the seed: plains, forests, deserts, snowy mountains, oceans and rivers, caves underground with ores (coal, iron, gold, diamond), bedrock at the bottom. Trees, grass, flowers, sand, water.
+- First-person view. WASD to move, mouse to look, Space to jump, Shift to sneak, double-tap W or Ctrl to sprint, F5 to switch to third person and see my blocky player.
+- Left-click to break blocks (with cracking and a break time that depends on the tool), right-click to place blocks. Dropped items I can pick up.
+- Hotbar with 9 slots and the scroll wheel, an inventory screen on E, a crafting table with real recipes (planks, sticks, crafting table, wooden/stone/iron tools, torches, furnace), and a furnace that smelts.
+- Survival mode with health, hunger, fall damage and drowning, and Creative mode with flying and every block. Switch in the pause menu.
+- Mobs: cows, pigs, sheep and chickens in the day; zombies, skeletons, creepers and spiders at night that attack me and can kill me, then a respawn screen.
+- A day and night cycle with a sun, moon, stars and clouds. Torches and lava give off light, caves are dark.
+- Water and lava that flow.
+- Sounds made in code: footsteps, breaking, placing, mobs, damage.
+- Saving and loading worlds in the browser.
+- Options: render distance, field of view, mouse sensitivity, volume.
+- Make your own pixel-art block textures in the classic 16x16 style. Use original art, no Mojang files.
+
+What you have to work with:
+- `bash ../../../tools/shot.sh <out.png> [query] [wait_ms]` takes a 1280x720 screenshot of your index.html running in Chrome. Make index.html support `?autoplay=1` (skip the menus, start a world, and let a computer player walk around, look around, break and place blocks) plus query options to screenshot each menu, night time, a cave and the inventory, so you can see the real game. Look at your screenshots with the Read tool. Use them often, check everything the way a player would see it, and fix anything that looks wrong, empty or basic.
+- Libraries load from cdnjs or jsdelivr. Use a recent three.js.
+- The game is served over http from this folder.
+
+You have 1 hour. It is now {START}, so you must be finished by {END}. Check the clock with `date` as you work. Get a playable version saved to index.html early, then keep improving it until the time is up. The saved version must always run.

@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AI Block Games</title>
+<style>
+  :root { --bg:#0b0b0d; --fg:#f4f4f5; --mute:#a1a1aa; --card:#17171b; --line:#2a2a30; --accent:#ff4f9a; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg); font:16px/1.5 system-ui, -apple-system, Segoe UI, sans-serif; }
+  main { max-width:960px; margin:0 auto; padding:48px 16px 64px; }
+  h1 { font-size:clamp(28px,5vw,44px); line-height:1.1; margin:0 0 12px; }
+  p.lead { color:var(--mute); margin:0 0 32px; max-width:640px; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); gap:16px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:14px; overflow:hidden; display:flex; flex-direction:column; }
+  .card img { width:100%; aspect-ratio:16/9; object-fit:cover; display:block; }
+  .body { padding:16px; display:flex; flex-direction:column; gap:6px; flex:1; }
+  .model { color:var(--mute); font-size:14px; }
+  .name { font-size:20px; font-weight:700; }
+  .play { margin-top:auto; align-self:flex-start; background:var(--accent); color:#0b0b0d; font-weight:700; text-decoration:none; padding:10px 18px; border-radius:999px; }
+  .links { margin-top:32px; color:var(--mute); }
+  .links a { color:var(--fg); }
+</style>
+</head>
+<body>
+<main>
+  <h1>Claude Fable 5.2 vs Opus 5.5 made a block-building survival game</h1>
+  <p class="lead">Claude Fable 5.2 and Claude Opus 5.5 got the same prompt and the same time to make a block-building survival game. Play both in your browser. WASD to move, mouse to look, Space to jump, left click to break, right click to place.</p>
+  <div class="grid">
+    <div class="card">
+      <img src="screenshots/fable.png" alt="Loamlands, made by Claude Fable 5.2">
+      <div class="body"><span class="model">Claude Fable 5.2</span><span class="name">Loamlands</span>
+        <a class="play" href="fable/">Play</a></div>
+    </div>
+    <div class="card">
+      <img src="screenshots/opus.png" alt="Blockhaven, made by Claude Opus 5.5">
+      <div class="body"><span class="model">Claude Opus 5.5</span><span class="name">Blockhaven</span>
+        <a class="play" href="opus/">Play</a></div>
+    </div>
+  </div>
+  <p class="links">Watch the video: <a href="https://youtu.be/jFr2s1PYAnc">Claude Fable 5.2 vs Opus 5.5 Make Minecraft</a>. Code and prompts: <a href="https://github.com/ModelBehaviorYT/fable-vs-opus-block-game">GitHub</a>. More AI-made games: <a href="https://modelbehavioryt.github.io/claude-vs-chatgpt-ai-games/">Claude vs ChatGPT open-world game</a>.</p>
+</main>
+</body>
+</html>

@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Blockhaven</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/vt323@5.0.12/index.css">
+<style>
+* { box-sizing: border-box; }
+html, body { margin:0; height:100%; overflow:hidden; background:#000; font-family:'VT323', monospace; color:#fff; user-select:none; }
+canvas#game { position:fixed; inset:0; width:100%; height:100%; display:block; image-rendering:pixelated; }
+.screen { position:fixed; inset:0; display:none; flex-direction:column; align-items:center; justify-content:center; z-index:20; }
+.screen.on { display:flex; }
+.dim { background:rgba(0,0,0,0.55); }
+.dirt-bg { background-color:#3a2c20; background-size:64px 64px; image-rendering:pixelated; }
+.btn { width:400px; height:40px; margin:4px; font-family:inherit; font-size:26px; color:#e0e0e0; text-shadow:2px 2px #3f3f3f;
+  background:linear-gradient(#8a8a8a,#6c6c6c); border:2px solid #000; box-shadow: inset 2px 2px #b0b0b0, inset -2px -3px #4a4a4a; cursor:pointer; }
+.btn:hover { background:linear-gradient(#8b95c9,#6a74a8); color:#ffffa0; box-shadow: inset 2px 2px #bcc4f0, inset -2px -3px #3c4470; }
+.btn.small { width:196px; font-size:21px; white-space:nowrap; padding:0 2px; }
+.row { display:flex; gap:8px; }
+h1.logo { font-size:120px; margin:0 0 6px 0; letter-spacing:6px; color:#c8c8c8; line-height:1;
+  text-shadow: 3px 3px 0 #6e6e6e, 6px 6px 0 #3a3a3a, 9px 9px 0 #1a1a1a; font-weight:normal; transform:perspective(400px) rotateX(12deg); }
+.splash { position:absolute; color:#ffff3a; font-size:30px; text-shadow:3px 3px #3f3f00; transform:rotate(-18deg); animation:pulse 0.6s ease-in-out infinite alternate; margin-left:520px; margin-top:-30px; }
+@keyframes pulse { from { transform:rotate(-18deg) scale(1); } to { transform:rotate(-18deg) scale(1.08); } }
+.title-top { margin-bottom:60px; display:flex; flex-direction:column; align-items:center; }
+.footer { position:absolute; bottom:6px; left:8px; font-size:22px; color:#ddd; text-shadow:2px 2px #333; }
+.footer.r { left:auto; right:8px; }
+h2 { font-weight:normal; font-size:34px; margin:10px; text-shadow:2px 2px #3f3f3f; }
+input.txt { width:400px; height:40px; background:#000; color:#fff; border:2px solid #a0a0a0; font-family:inherit; font-size:26px; padding:0 8px; margin:4px; }
+label.lbl { color:#a0a0a0; font-size:22px; width:400px; text-align:left; }
+.worldlist { width:560px; height:330px; overflow-y:auto; background:rgba(0,0,0,0.5); border-top:2px solid #000; border-bottom:2px solid #000; margin-bottom:10px; }
+.world { padding:8px 14px; margin:4px; border:2px solid transparent; cursor:pointer; }
+.world.sel { border-color:#ccc; background:rgba(0,0,0,0.6); }
+.world .n { font-size:28px; } .world .d { font-size:20px; color:#909090; }
+.slider { width:400px; height:40px; margin:4px; position:relative; background:#000; border:2px solid #333; box-shadow: inset 0 0 0 2px #5a5a5a; }
+.slider input { position:absolute; inset:0; width:100%; height:100%; opacity:0; cursor:pointer; margin:0; }
+.slider .knob { position:absolute; top:0; width:16px; height:36px; background:linear-gradient(#a8a8a8,#7c7c7c); border:2px solid #000; pointer-events:none; }
+.slider .lab { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; font-size:26px; text-shadow:2px 2px #3f3f3f; pointer-events:none; }
+/* HUD */
+#hud { position:fixed; inset:0; pointer-events:none; z-index:5; display:none; }
+#hud.on { display:block; }
+#cross { position:absolute; left:50%; top:50%; width:22px; height:22px; margin:-11px 0 0 -11px; mix-blend-mode:difference; }
+#cross:before, #cross:after { content:''; position:absolute; background:#ddd; }
+#cross:before { left:10px; top:0; width:2px; height:22px; } #cross:after { top:10px; left:0; width:22px; height:2px; }
+#hotbar { position:absolute; bottom:4px; left:50%; transform:translateX(-50%); display:flex; padding:3px; background:rgba(20,20,20,0.55); border:3px solid #222; box-shadow: inset 0 0 0 2px #777; }
+.hs { width:50px; height:50px; position:relative; border:2px solid #555; margin:0 1px; background:rgba(120,120,120,0.25); }
+.hs.sel { outline:4px solid #f4f4f4; outline-offset:0px; z-index:2; box-shadow:0 0 0 2px #000; }
+.slot img, .hs img { position:absolute; left:4px; top:4px; width:calc(100% - 8px); height:calc(100% - 8px); image-rendering:pixelated; }
+.cnt { position:absolute; right:2px; bottom:-2px; font-size:24px; text-shadow:2px 2px #3f3f3f; }
+.dur { position:absolute; left:5px; right:5px; bottom:4px; height:3px; background:#000; } .dur i { display:block; height:100%; }
+#xpbar { position:absolute; bottom:72px; left:50%; transform:translateX(-50%); width:470px; height:7px; background:#222; border:1px solid #000; }
+#xpbar i { display:block; height:100%; width:0; background:linear-gradient(#b8ff60,#5ac818); }
+#xpbar span { position:absolute; left:0; right:0; top:-19px; line-height:20px; text-align:center; color:#80ff20; font-size:24px; text-shadow:2px 2px #000, -1px -1px #000; }
+#bars { position:absolute; bottom:84px; left:50%; transform:translateX(-50%); width:470px; height:44px; }
+.bar { position:absolute; display:flex; gap:0; } .bar img { width:22px; height:22px; image-rendering:pixelated; margin-right:1px; }
+#hearts { left:0; bottom:0; } #food { right:0; bottom:0; flex-direction:row-reverse; } #air { right:0; bottom:24px; flex-direction:row-reverse; } #armorbar { left:0; bottom:24px; }
+#itemname { position:absolute; bottom:120px; width:100%; text-align:center; font-size:28px; text-shadow:2px 2px #3f3f3f; transition:opacity 0.5s; }
+#debug { position:absolute; left:4px; top:4px; font-size:22px; line-height:22px; white-space:pre; text-shadow:2px 2px #333; display:none; background:rgba(0,0,0,0.3); padding:2px 6px;}
+#overlay { position:absolute; inset:0; pointer-events:none; }
+#modeTag { position:absolute; top:6px; right:10px; font-size:22px; text-shadow:2px 2px #333; color:#ddd; }
+#msg { position:absolute; top:30%; width:100%; text-align:center; font-size:26px; text-shadow:2px 2px #333; }
+/* Inventory */
+#inv { position:fixed; inset:0; z-index:15; display:none; align-items:center; justify-content:center; background:rgba(0,0,0,0.45); }
+#inv.on { display:flex; }
+.panel { background:#c6c6c6; border:3px solid #000; box-shadow: inset 3px 3px #fff, inset -3px -3px #555; padding:14px; color:#3f3f3f; font-size:24px; border-radius:4px; }
+.panel .t { margin:0 0 6px 4px; }
+.grid { display:grid; gap:0; }
+.slot { width:50px; height:50px; position:relative; background:#8b8b8b; border:2px solid; border-color:#373737 #fff #fff #373737; }
+.slot:hover { background:#a8a8a8; }
+.slot .cnt { color:#fff; }
+.craftrow { display:flex; align-items:center; gap:22px; margin:6px 0 14px 0; justify-content:center; }
+.arrow { width:44px; height:30px; position:relative; }
+.arrow:before { content:''; position:absolute; left:0; top:10px; width:28px; height:10px; background:#8b8b8b; }
+.arrow:after { content:''; position:absolute; left:26px; top:2px; border:13px solid transparent; border-left:18px solid #8b8b8b; }
+.arrow .fill { position:absolute; left:0; top:10px; height:10px; background:#fff; z-index:2; }
+.flame { width:28px; height:28px; position:relative; background:#8b8b8b; clip-path:polygon(50% 0, 85% 45%, 75% 100%, 25% 100%, 15% 45%); }
+.flame .fill { position:absolute; bottom:0; left:0; right:0; background:linear-gradient(#ffe24a,#ff6a00); }
+.big { width:62px; height:62px; }
+img.glint { filter: drop-shadow(0 0 3px #c060ff) drop-shadow(0 0 2px #a040ff) saturate(1.4); animation: glint 1.6s ease-in-out infinite alternate; }
+@keyframes glint { from { filter: drop-shadow(0 0 2px #b050ff) hue-rotate(0deg); } to { filter: drop-shadow(0 0 5px #d080ff) hue-rotate(25deg) brightness(1.25); } }
+#cursorItem { position:fixed; width:46px; height:46px; pointer-events:none; z-index:30; display:none; }
+#cursorItem img { width:100%; height:100%; image-rendering:pixelated; }
+#tooltip { position:fixed; z-index:31; background:rgba(16,0,16,0.94); border:2px solid #2a0a5e; color:#fff; padding:2px 8px; font-size:22px; pointer-events:none; display:none; }
+.creativeGrid { max-height:min(420px, 52vh); padding-right:6px; overflow-y:auto; margin-bottom:10px; }
+#death { background:rgba(120,0,0,0.45); }
+#death h1 { font-size:80px; font-weight:normal; text-shadow:4px 4px #3a0000; margin:0 0 30px; }
+#loading .bar2 { width:400px; height:6px; background:#333; margin-top:16px; } #loading .bar2 i { display:block; height:100%; background:#6f6; width:0; }
+</style>
+<script type="importmap">{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js" } }</script>
+</head>
+<body>
+<canvas id="game"></canvas>
+<div id="hud">
+  <div style="position:absolute;inset:0;background:radial-gradient(ellipse at center, rgba(0,0,0,0) 55%, rgba(0,0,0,0.32) 100%)"></div>
+  <div id="overlay"></div>
+  <div id="cross"></div>
+  <div id="debug"></div><div id="modeTag"></div><div id="msg"></div>
+  <div id="itemname"></div>
+  <div id="bars"><div class="bar" id="hearts"></div><div class="bar" id="food"></div><div class="bar" id="air"></div><div class="bar" id="armorbar"></div></div>
+  <div id="xpbar"><i id="xpfill"></i><span id="xplvl"></span></div>
+  <div id="hotbar"></div>
+</div>
+<div id="inv"><div class="panel" id="invPanel"></div></div>
+<div id="cursorItem"><img><span class="cnt"></span></div>
+<div id="tooltip"></div>
+
+<div class="screen" id="title">
+  <div class="title-top"><h1 class="logo">BLOCKHAVEN</h1><div class="splash" id="splash">Also try caves!</div></div>
+  <button class="btn" data-act="singleplayer">Singleplayer</button>
+  <button class="btn" data-act="options">Options...</button>
+  <button class="btn" data-act="quit">Quit Game</button>
+  <div class="footer">Blockhaven 1.0</div><div class="footer r">Original voxel sandbox. Not affiliated with Mojang.</div>
+</div>
+<div class="screen dim" id="worlds">
+  <h2>Select World</h2>
+  <div class="worldlist" id="worldlist"></div>
+  <div class="row"><button class="btn small" data-act="playsel">Play Selected World</button><button class="btn small" data-act="create">Create New World</button></div>
+  <div class="row"><button class="btn small" data-act="delsel">Delete</button><button class="btn small" data-act="back">Cancel</button></div>
+</div>
+<div class="screen dim" id="create">
+  <h2>Create New World</h2>
+  <label class="lbl">World Name</label><input class="txt" id="wname" value="New World" maxlength="32">
+  <label class="lbl">Seed for the world generator (leave blank for random)</label><input class="txt" id="wseed" placeholder="">
+  <button class="btn" id="wmode" data-act="togglemode">Game Mode: Survival</button>
+  <div class="row" style="margin-top:20px"><button class="btn small" data-act="docreate">Create New World</button><button class="btn small" data-act="worlds">Cancel</button></div>
+</div>
+<div class="screen dim" id="options">
+  <h2>Options</h2>
+  <div class="slider" data-opt="render" data-min="2" data-max="12" data-step="1"><input type="range"><div class="knob"></div><div class="lab"></div></div>
+  <div class="slider" data-opt="fov" data-min="50" data-max="110" data-step="1"><input type="range"><div class="knob"></div><div class="lab"></div></div>
+  <div class="slider" data-opt="sens" data-min="10" data-max="200" data-step="1"><input type="range"><div class="knob"></div><div class="lab"></div></div>
+  <div class="slider" data-opt="vol" data-min="0" data-max="100" data-step="1"><input type="range"><div class="knob"></div><div class="lab"></div></div>
+  <button class="btn" style="margin-top:24px" data-act="optdone">Done</button>
+</div>
+<div class="screen dim" id="pause">
+  <h2>Game Menu</h2>
+  <button class="btn" data-act="resume">Back to Game</button>
+  <button class="btn" id="pmode" data-act="pmode">Game Mode: Survival</button>
+  <button class="btn" data-act="options">Options...</button>
+  <button class="btn" data-act="savequit">Save and Quit to Title</button>
+</div>
+<div class="screen" id="death">
+  <h1>You died!</h1><div id="deathmsg" style="font-size:26px;margin-bottom:30px"></div>
+  <button class="btn" data-act="respawn">Respawn</button>
+  <button class="btn" data-act="savequit">Title Screen</button>
+</div>
+<div class="screen dirt-bg" id="loading"><h2 id="loadmsg">Generating world</h2><div class="bar2"><i id="loadbar"></i></div></div>
+<div class="screen dirt-bg" id="quit"><h2>Thanks for playing!</h2><div style="font-size:24px;color:#aaa">You can close this tab.</div><button class="btn" style="margin-top:30px" data-act="back">Back to Title</button></div>
+<script type="module" src="js/main.js"></script>
+</body>
+</html>

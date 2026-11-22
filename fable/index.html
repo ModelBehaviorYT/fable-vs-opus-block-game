@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><title>Loamlands</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/vt323@5.0.8/index.css">
+<style>
+*{box-sizing:border-box;user-select:none}
+html,body{margin:0;height:100%;overflow:hidden;background:#0b1016;font-family:'VT323','Lucida Console',monospace;color:#fff;font-size:22px}
+canvas#c{position:fixed;inset:0;width:100%;height:100%;display:block}
+img,.px{image-rendering:pixelated}
+#hud{position:fixed;inset:0;pointer-events:none}
+#cross{position:absolute;left:50%;top:50%;width:22px;height:22px;margin:-11px;mix-blend-mode:difference}
+#cross:before,#cross:after{content:'';position:absolute;background:#fff}
+#cross:before{left:10px;top:0;width:2px;height:22px}#cross:after{top:10px;left:0;height:2px;width:22px}
+#hotbar{position:absolute;bottom:6px;left:50%;transform:translateX(-50%);display:flex;background:rgba(14,18,24,.72);border:3px solid #10141a;box-shadow:0 0 0 2px #5d6b78 inset;padding:3px}
+.hs{width:50px;height:50px;border:2px solid #3a4550;border-right-color:#222a32;border-bottom-color:#222a32;position:relative;background:rgba(120,135,150,.22)}
+.hs.sel{outline:4px solid #f4f1e4;outline-offset:-1px;z-index:2;background:rgba(200,210,220,.3)}
+.ic{position:absolute;left:50%;top:50%;width:36px;height:36px;margin:-18px;background-size:100% 100%;image-rendering:pixelated}
+.cnt{position:absolute;right:2px;bottom:-3px;font-size:22px;text-shadow:2px 2px 0 #222;line-height:1}
+.dur{position:absolute;left:5px;right:5px;bottom:3px;height:4px;background:#111}.dur i{display:block;height:100%}
+#bars{position:absolute;bottom:80px;left:50%;width:468px;margin-left:-234px;height:44px}
+#hearts,#food,#air{position:absolute;display:flex;gap:1px}
+#hearts{left:0;bottom:0}#food{right:0;bottom:0;flex-direction:row-reverse}#air{right:0;bottom:22px;flex-direction:row-reverse}
+#bars img{width:20px;height:20px}
+#itemname{position:absolute;bottom:118px;width:100%;text-align:center;font-size:24px;text-shadow:2px 2px 0 #222;opacity:0;transition:opacity .4s}
+#debug{position:absolute;left:6px;top:4px;font-size:20px;line-height:1.05;text-shadow:1px 1px 0 #000;white-space:pre;display:none}
+#hint{position:absolute;top:30%;width:100%;text-align:center;font-size:28px;text-shadow:2px 2px 0 #000;display:none}
+#vig{position:absolute;inset:0;box-shadow:inset 0 0 160px 60px rgba(200,0,0,.75);opacity:0}
+#water{position:absolute;inset:0;background:rgba(20,60,170,.38);display:none}
+#lavaov{position:absolute;inset:0;background:rgba(230,80,10,.55);display:none}
+#toast{position:absolute;left:10px;bottom:132px;font-size:22px;text-shadow:2px 2px 0 #000;opacity:0;transition:opacity .5s}
+#err{position:fixed;left:0;top:0;right:0;color:#ff6;background:rgba(120,0,0,.85);font:13px monospace;white-space:pre-wrap;z-index:99;display:none;padding:4px}
+.screen{position:fixed;inset:0;display:none;flex-direction:column;align-items:center;justify-content:center;gap:10px;z-index:10}
+.dim{background:rgba(6,10,16,.62)}
+.screen h2{font-weight:normal;font-size:40px;margin:0 0 10px;text-shadow:3px 3px 0 #1a1f26;letter-spacing:1px}
+.btn{font:inherit;font-size:26px;color:#f3f0e2;width:400px;height:46px;border:3px solid #0d1116;background:linear-gradient(#6f8a5a,#58724a);box-shadow:inset 3px 3px 0 #94ad7c,inset -3px -3px 0 #3e5334;text-shadow:2px 2px 0 #2a331f;cursor:pointer;pointer-events:auto;letter-spacing:.5px}
+.btn:hover{background:linear-gradient(#86a56c,#6a8a58);color:#fffbd0;outline:2px solid #f4f1e4}
+.btn.gray{background:linear-gradient(#77808a,#5c656e);box-shadow:inset 3px 3px 0 #a0a9b2,inset -3px -3px 0 #3d444b;text-shadow:2px 2px 0 #24292e}
+.btn.gray:hover{background:linear-gradient(#8a949e,#6c7680)}
+.btn.sm{width:195px}.btn.red{background:linear-gradient(#9a5448,#7c4038);box-shadow:inset 3px 3px 0 #c07a6c,inset -3px -3px 0 #552a24}
+.row{display:flex;gap:10px}
+#logo{font-size:128px;line-height:.9;letter-spacing:6px;color:#e9e2c4;text-shadow:0 5px 0 #a89c6c,0 10px 0 #6a7f4a,0 15px 0 #3f5332,6px 21px 0 rgba(0,0,0,.45);margin-bottom:0}
+#logo span{color:#8ec76a}
+#sub{font-size:28px;color:#ffe27a;text-shadow:2px 2px 0 #3a2f10;margin-bottom:34px;transform:rotate(-2deg)}
+#foot{position:absolute;bottom:6px;left:10px;right:10px;display:flex;justify-content:space-between;font-size:20px;text-shadow:2px 2px 0 #000;opacity:.9}
+.panel{background:#262d36;border:3px solid #0d1116;box-shadow:inset 3px 3px 0 #48535f,inset -3px -3px 0 #161b21,0 10px 40px rgba(0,0,0,.5);padding:18px;pointer-events:auto}
+#wlist{width:640px;height:300px;overflow-y:auto;background:#12161b;border:3px solid #0d1116;padding:6px;display:flex;flex-direction:column;gap:6px}
+.wrow{display:flex;align-items:center;gap:10px;padding:6px 10px;background:#262d36;border:2px solid #3a4550;cursor:pointer}
+.wrow:hover,.wrow.sel{border-color:#f4f1e4;background:#2f3944}
+.wrow .ic2{width:48px;height:48px;background-size:100% 100%;image-rendering:pixelated}
+.wrow b{font-weight:normal;font-size:26px;display:block;line-height:1}.wrow small{font-size:19px;color:#9fb0bf}
+.field{display:flex;flex-direction:column;width:400px;font-size:22px;color:#b9c6d2}
+.field input[type=text]{font:inherit;font-size:24px;background:#0c0f13;border:3px solid #5d6b78;color:#fff;padding:5px 8px;outline:none;user-select:text}
+.field input[type=text]:focus{border-color:#f4f1e4}
+.sl{width:520px;display:flex;align-items:center;gap:12px;background:#262d36;border:3px solid #0d1116;box-shadow:inset 3px 3px 0 #48535f,inset -3px -3px 0 #161b21;padding:6px 14px;font-size:24px}
+.sl span{flex:0 0 250px}.sl input{flex:1;accent-color:#8ec76a;height:22px}
+#gui .panel{padding:14px 16px}
+.slots{display:grid;grid-template-columns:repeat(9,48px);gap:0}
+.slot{width:48px;height:48px;background:#3b4551;border:2px solid #1b2128;border-right-color:#5a6775;border-bottom-color:#5a6775;position:relative}
+.slot:hover{background:#56636f}
+.gt{font-size:24px;color:#cfd8e0;margin:0 0 6px;text-shadow:2px 2px 0 #14181d}
+#guiTop{display:flex;align-items:center;justify-content:center;gap:18px;min-height:150px;margin-bottom:8px}
+.arrow{font-size:44px;color:#93a1ae;position:relative;width:52px;text-align:center}
+.prog{position:absolute;left:0;top:0;overflow:hidden;color:#f4f1e4;white-space:nowrap}
+.flame{width:32px;height:32px;margin:4px auto;background:#1b2128;position:relative;clip-path:polygon(50% 0,80% 35%,100% 70%,80% 100%,20% 100%,0 70%,25% 40%)}
+.flame i{position:absolute;left:0;right:0;bottom:0;background:linear-gradient(#ffe066,#ff7a10)}
+#cursor{position:fixed;width:48px;height:48px;pointer-events:none;z-index:50;display:none;margin:-24px 0 0 -24px}
+#tip{position:fixed;z-index:51;pointer-events:none;background:#12081cf0;border:2px solid #4a2a8a;padding:1px 8px;font-size:22px;display:none;white-space:nowrap}
+#cregrid{max-height:196px;overflow-y:auto;grid-template-columns:repeat(9,48px);display:grid;width:450px}
+#pmodel{width:96px;height:140px;background:#12161b;border:2px solid #1b2128;display:flex;align-items:center;justify-content:center}
+.keys{margin-top:14px;font-size:20px;color:#c9d4de;text-align:center;text-shadow:2px 2px 0 #000;line-height:1.15}
+#died h2{font-size:72px;color:#ff5a4a;text-shadow:4px 4px 0 #3a0a06}
+#deathmsg{font-size:28px;margin-bottom:20px;text-shadow:2px 2px 0 #000}
+#loadbar{width:400px;height:14px;border:3px solid #0d1116;background:#12161b}#loadbar i{display:block;height:100%;width:0;background:#8ec76a}
+::-webkit-scrollbar{width:12px}::-webkit-scrollbar-track{background:#12161b}::-webkit-scrollbar-thumb{background:#5d6b78;border:2px solid #12161b}
+</style></head><body>
+<canvas id="c"></canvas>
+<div id="hud">
+  <div id="riftov" style="position:absolute;inset:0;background:radial-gradient(#2ee0b8cc,#0c6a70ee);opacity:0"></div><div id="water"></div><div id="lavaov"></div><div id="vig"></div>
+  <div id="cross"></div><div id="debug"></div><div id="hint">Click to capture the mouse</div>
+  <div id="itemname"></div><div id="toast"></div>
+  <div id="bars"><div style="position:absolute;left:0;right:0;bottom:-10px;height:7px;background:#12161b;border:1px solid #05080b"><div id="xpfill" style="height:100%;width:0;background:linear-gradient(#b8ff5a,#5ac81e)"></div></div><div id="xplvl" style="position:absolute;left:0;right:0;bottom:-6px;text-align:center;font-size:24px;color:#a8ff4a;text-shadow:2px 2px 0 #10200a,-1px -1px 0 #10200a"></div>
+    <div id="armor" style="position:absolute;display:flex;gap:1px;left:0;bottom:22px"></div><div id="hearts"></div><div id="food"></div><div id="air"></div></div>
+  <div id="hotbar"></div>
+</div>
+<div id="title" class="screen">
+  <div id="logo">LOAM<span>LANDS</span></div><div id="sub">Dig deep. Build high. Survive the night.</div>
+  <button class="btn" data-go="worlds">Singleplayer</button>
+  <button class="btn gray" data-go="options">Options</button>
+  <button class="btn gray" data-go="quit">Quit Game</button>
+  <div id="foot"><span>Loamlands 1.2</span><span>An original voxel sandbox &middot; all art &amp; sound made in code</span></div>
+</div>
+<div id="worlds" class="screen dim">
+  <h2>Select World</h2><div id="wlist"></div>
+  <div class="row"><button class="btn sm" id="wplay">Play Selected</button><button class="btn sm" data-go="create">Create New World</button><button class="btn sm red" id="wdel">Delete</button></div>
+  <button class="btn gray" data-go="title">Back</button>
+</div>
+<div id="create" class="screen dim">
+  <h2>Create New World</h2>
+  <label class="field">World Name<input type="text" id="wname" maxlength="28" value="New World"></label>
+  <label class="field">Seed (leave blank for a random world)<input type="text" id="wseed" maxlength="28"></label>
+  <button class="btn gray" id="wmode">Game Mode: Survival</button>
+  <div class="row"><button class="btn sm" id="wcreate">Create World</button><button class="btn sm gray" data-go="worlds">Cancel</button></div>
+</div>
+<div id="options" class="screen dim">
+  <h2>Options</h2>
+  <div class="sl"><span id="o_rd_l"></span><input type="range" id="o_rd" min="2" max="16" step="1"></div>
+  <div class="sl"><span id="o_fov_l"></span><input type="range" id="o_fov" min="50" max="110" step="1"></div>
+  <div class="sl"><span id="o_sens_l"></span><input type="range" id="o_sens" min="20" max="300" step="5"></div>
+  <div class="sl"><span id="o_vol_l"></span><input type="range" id="o_vol" min="0" max="100" step="1"></div>
+  <button class="btn gray" id="odiff" style="width:520px">Difficulty: Normal</button>
+  <button class="btn" id="odone" style="margin-top:14px">Done</button>
+  <div class="keys">WASD move &middot; Space jump (double-tap to fly in Creative) &middot; Shift sneak &middot; R, Ctrl or double-tap W sprint<br>Left-click break / attack &middot; Right-click place / use / eat &middot; Wheel or 1-9 hotbar &middot; E inventory &middot; Q drop &middot; F5 view &middot; F1 hide HUD &middot; F3 debug &middot; T or / commands (/help)</div>
+</div>
+<div id="quit" class="screen dim"><h2>Thanks for playing Loamlands!</h2><div style="margin-bottom:20px;color:#b9c6d2">Your worlds are saved in this browser. You can close this tab now.</div><button class="btn" data-go="title">Back to Title</button></div>
+<div id="pause" class="screen dim">
+  <h2>Game Paused</h2>
+  <button class="btn" id="presume">Back to Game</button>
+  <button class="btn gray" data-go="options">Options</button>
+  <button class="btn gray" data-go="recipes">Recipe Book</button>
+  <button class="btn gray" id="pmode">Game Mode: Survival</button>
+  <button class="btn gray" id="pquit">Save and Quit to Title</button>
+  <div class="keys" style="color:#ffe27a">Tips: trade with village settlers (iron, gold, coal, diamonds) &middot; hoe + seeds from tall grass grow wheat for bread<br>Build an obsidian frame and light it with Ember Dust to open a Rift Gate to the Emberdeep</div>
+  <div class="keys" style="margin-top:6px">WASD move &middot; Space jump (double-tap to fly in Creative) &middot; Shift sneak &middot; R, Ctrl or double-tap W sprint<br>Left-click break / attack &middot; Right-click place / use / eat &middot; Wheel or 1-9 hotbar &middot; E inventory &middot; Q drop &middot; F5 view &middot; F1 hide HUD &middot; F3 debug &middot; T or / commands (/help)</div>
+</div>
+<div id="recipes" class="screen dim"><h2>Recipe Book</h2><div id="rlist" style="width:1040px;height:400px;overflow-y:auto;background:#12161b;border:3px solid #0d1116;padding:8px;display:grid;grid-template-columns:repeat(4,1fr);gap:6px;pointer-events:auto"></div><div style="color:#b9c6d2;font-size:20px">Furnace: ores, sand, cobblestone, logs, raw meat and fish can be smelted with coal, wood or a lava bucket.<br>Settler trades (right-click while holding): iron &rarr; arrows &middot; gold &rarr; steak &middot; diamond &rarr; gold block &middot; coal &rarr; torches &middot; cobblestone &rarr; iron<br>Animals follow wheat, seeds or apples; feed one wheat or seeds to raise a baby. Put armor in the Armor slot of your inventory.<br>Right-click a Bookshelf holding a tool to enchant it (3 levels). Place a Boat on water and right-click it to sail. Shears give wool.<br>Fishing Rod: right-click to cast into water, right-click again on a bite. Feed a wolf bones to tame it. T or / opens commands.</div><button class="btn" data-go="pause">Back</button></div>
+<div id="died" class="screen" style="background:rgba(120,10,10,.5)"><h2>You Died!</h2><div id="deathmsg"></div><button class="btn" id="respawn">Respawn</button><button class="btn gray" id="dquit">Title Screen</button></div>
+<div id="loading" class="screen" style="background:#161c16"><h2 id="loadtxt">Building terrain...</h2><div id="loadbar"><i></i></div></div>
+<div id="gui" class="screen dim"><div class="panel"><div class="gt" id="guiTitle"></div><div id="guiTop"></div><div class="gt">Inventory</div><div class="slots" id="guiMain"></div><div style="height:10px"></div><div class="slots" id="guiHot"></div></div></div>
+<div id="chatlog" style="position:fixed;left:8px;bottom:170px;font-size:22px;text-shadow:2px 2px 0 #000;pointer-events:none;z-index:20;line-height:1.1;white-space:pre-wrap;max-width:700px"></div>
+<input id="chat" type="text" maxlength="80" autocomplete="off" spellcheck="false" style="display:none;position:fixed;left:6px;right:6px;bottom:128px;z-index:21;font:inherit;font-size:24px;background:rgba(0,0,0,.6);border:2px solid #5d6b78;color:#fff;padding:3px 8px;outline:none;user-select:text">
+<div id="adv" style="position:fixed;right:-360px;top:14px;width:330px;z-index:30;background:#262d36;border:3px solid #0d1116;box-shadow:inset 3px 3px 0 #48535f,inset -3px -3px 0 #161b21;padding:8px 12px;display:flex;gap:10px;align-items:center;transition:right .4s;pointer-events:none"><div id="advic" style="width:40px;height:40px;background-size:100% 100%;image-rendering:pixelated;flex:0 0 40px"></div><div><div style="color:#ffe27a;font-size:20px;line-height:1">Advancement made!</div><div id="advtx" style="font-size:24px;line-height:1.05"></div></div></div>
+<div id="boss" style="position:fixed;left:50%;top:14px;width:460px;margin-left:-230px;z-index:25;text-align:center;font-size:24px;text-shadow:2px 2px 0 #000;display:none;pointer-events:none"><span id="bossn">Ember Warden</span><div style="height:12px;border:3px solid #0d1116;background:#2a1010"><div id="bossf" style="height:100%;background:linear-gradient(#ff8a3a,#c8301a);width:100%"></div></div></div>
+<div id="cursor"></div><div id="tip"></div><div id="err"></div>
+<script>window.addEventListener('error',e=>{const d=document.getElementById('err');d.style.display='block';d.textContent+=(e.message||e)+' @'+(e.filename||'').split('/').pop()+':'+e.lineno+'\n';});</script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
+<script src="js/defs.js"></script>
+<script src="js/world.js"></script>
+<script src="js/entities.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/main.js"></script>
+</body></html>
