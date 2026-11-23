@@ -13,38 +13,66 @@ function sh(c,f){return(Math.min(255,((c>>16)&255)*f)|0)<<16|(Math.min(255,((c>>
 function tile(name,fn){
   const id=nTiles++;TILE[name]=id;const img=actx.createImageData(16,16),d=img.data;const r=rng32(hashStr(name));
   const set=(x,y,c,a)=>{if(x<0||y<0||x>15||y>15)return;const i=(y*16+x)*4;d[i]=(c>>16)&255;d[i+1]=(c>>8)&255;d[i+2]=c&255;d[i+3]=a===undefined?255:a;};
-  fn(set,r);actx.putImageData(img,(id%16)*16,((id/16)|0)*16);
+  const get=(x,y)=>{const i=(((y&15)<<4)|(x&15))*4;return d[i+3]?(d[i]<<16|d[i+1]<<8|d[i+2]):-1;};
+  fn(set,r,get);actx.putImageData(img,(id%16)*16,((id/16)|0)*16);
   let R=0,G=0,B=0,n=0;for(let i=0;i<1024;i+=4)if(d[i+3]>100){R+=d[i];G+=d[i+1];B+=d[i+2];n++;}
   n=n||1;tileAvg[id]=[R/n/255,G/n/255,B/n/255];
 }
 function speck(set,r,pal,a){for(let y=0;y<16;y++)for(let x=0;x<16;x++)set(x,y,pal[(r()*pal.length)|0],a);}
-const pDirt=(s,r)=>{speck(s,r,[0x8a5a3a,0x7a4e30,0x966544,0x6b432a,0x8a5a3a,0x855636]);for(let i=0;i<5;i++)s((r()*16)|0,(r()*16)|0,0xa87a58);};
-const pGrass=(s,r)=>speck(s,r,[0x5fa83c,0x55993a,0x6ab845,0x4c8c33,0x5fa83c,0x64ae40]);
-const pStone=(s,r)=>{speck(s,r,[0x8c8c8c,0x878787,0x929292,0x818181]);for(let i=0;i<7;i++){const x=(r()*13)|0,y=(r()*15)|0,l=2+((r()*4)|0);for(let k=0;k<l;k++){s(x+k,y,0x747474);s(x+k,y+1,0x9a9a9a);}}};
-function pVor(s,r,n,pal,edge){const pts=[];for(let i=0;i<n;i++)pts.push([r()*16,r()*16,(r()*pal.length)|0]);
-  for(let y=0;y<16;y++)for(let x=0;x<16;x++){let d1=99,d2=99,c=0;for(const p of pts){let dx=Math.abs(x-p[0]),dy=Math.abs(y-p[1]);if(dx>8)dx=16-dx;if(dy>8)dy=16-dy;const d=Math.sqrt(dx*dx+dy*dy);if(d<d1){d2=d1;d1=d;c=p[2];}else if(d<d2)d2=d;}
-    s(x,y,d2-d1<1.1?edge:sh(pal[c],0.95+r()*0.1));}}
-const pCobble=(s,r)=>pVor(s,r,11,[0x9a9a9a,0x8b8b8b,0xa8a8a8,0x7d7d7d],0x565656);
-const pPlanks=(s,r)=>{for(let y=0;y<16;y++)for(let x=0;x<16;x++){const b=y>>2;let c=sh(0xb58d52,0.93+r()*0.12+(b%2)*0.04);if(y%4===3)c=0x7d5f33;else if(x===(b*7+3)%16)c=0x8a6a3a;s(x,y,c);}};
-const pLog=(pal)=>(s,r)=>{for(let x=0;x<16;x++){let c=pal[(r()*pal.length)|0];for(let y=0;y<16;y++){if(r()<0.22)c=pal[(r()*pal.length)|0];s(x,y,c);}}};
-const pLogTop=(bark,a,b)=>(s,r)=>{for(let y=0;y<16;y++)for(let x=0;x<16;x++){const d=Math.max(Math.abs(x-7.5),Math.abs(y-7.5));s(x,y,d>7?bark:sh((d|0)%2?a:b,0.96+r()*0.08));}};
-const pLeaves=(c)=>(s,r)=>{for(let y=0;y<16;y++)for(let x=0;x<16;x++){const v=r();if(v<0.13)s(x,y,0,0);else s(x,y,sh(c,v<0.35?0.72:v<0.6?0.88:v<0.85?1:1.16));}};
-const pOre=(c)=>(s,r)=>{pStone(s,r);for(let i=0;i<6;i++){const x=1+((r()*13)|0),y=1+((r()*13)|0);s(x,y,c);s(x+1,y,sh(c,1.25));s(x,y+1,sh(c,0.8));if(r()<0.6)s(x+1,y+1,c);s(x+2,y+1,0x6a6a6a);s(x+1,y+2,0x6a6a6a);}};
-const pTopOn=(base,top)=>(s,r)=>{base(s,r);for(let x=0;x<16;x++){const d=2+((r()*3)|0);for(let y=0;y<d;y++)s(x,y,top[(r()*top.length)|0]);}};
+// tileable value noise (f cells per tile) and a normalised 3-octave blend, so textures have soft clumps instead of white noise
+function vnoise(r,f){const g=[];for(let i=0;i<f*f;i++)g.push(r());const o=new Float32Array(256);for(let y=0;y<16;y++)for(let x=0;x<16;x++){const fx=x*f/16,fy=y*f/16,x0=fx|0,y0=fy|0,x1=(x0+1)%f,y1=(y0+1)%f;let tx=fx-x0,ty=fy-y0;tx=tx*tx*(3-2*tx);ty=ty*ty*(3-2*ty);const a=g[y0*f+x0],b=g[y0*f+x1],c=g[y1*f+x0],e=g[y1*f+x1];o[y*16+x]=a+(b-a)*tx+(c-a)*ty+(a-b-c+e)*tx*ty;}return o;}
+function fnoise(r,w){w=w||[0.45,0.35,0.2,0.12];const a=vnoise(r,2),b=vnoise(r,4),c=vnoise(r,8),o=new Float32Array(256);let lo=9,hi=-9;for(let i=0;i<256;i++){const v=a[i]*w[0]+b[i]*w[1]+c[i]*w[2]+(r()-0.5)*w[3];o[i]=v;if(v<lo)lo=v;if(v>hi)hi=v;}for(let i=0;i<256;i++)o[i]=(o[i]-lo)/(hi-lo||1);return o;}
+const ramp=(p,v)=>p[clamp((v*p.length)|0,0,p.length-1)];
+const pField=(pal,w,post)=>(s,r,g)=>{const n=fnoise(r,w);for(let i=0;i<256;i++)s(i&15,i>>4,ramp(pal,n[i]));if(post)post(s,r,g);};
+// cell painter: cell(x,y) -> id or -1 for mortar; each cell gets a lit top-left rim and a shaded bottom-right rim
+function cells(s,cell,col,mort,hi,lo){const id=new Int32Array(256);for(let i=0;i<256;i++)id[i]=cell(i&15,i>>4);const I=(x,y)=>id[((y&15)<<4)|(x&15)];hi=hi||1.2;lo=lo||0.72;
+  for(let y=0;y<16;y++)for(let x=0;x<16;x++){const c=I(x,y);if(c<0){s(x,y,mort(x,y));continue;}let k=col(c,x,y);if(I(x,y-1)!==c||I(x-1,y)!==c)k=sh(k,hi);else if(I(x,y+1)!==c||I(x+1,y)!==c)k=sh(k,lo);s(x,y,k);}}
+function vorCell(r,n,w){const pts=[];for(let i=0;i<n;i++)pts.push([r()*16,r()*16]);return(x,y)=>{let d1=99,d2=99,c=0;for(let i=0;i<n;i++){const p=pts[i];let dx=Math.abs(x+0.5-p[0]),dy=Math.abs(y+0.5-p[1]);if(dx>8)dx=16-dx;if(dy>8)dy=16-dy;const d=Math.sqrt(dx*dx+dy*dy);if(d<d1){d2=d1;d1=d;c=i;}else if(d<d2)d2=d;}return d2-d1<w?-1:c;};}
+function pVor(s,r,n,pal,edge,w){const cf=vorCell(r,n,w||1.0),cc=[];for(let i=0;i<n;i++)cc.push(pal[(r()*pal.length)|0]);const fn=fnoise(r);cells(s,cf,(c,x,y)=>sh(cc[c],0.88+fn[y*16+x]*0.22),(x,y)=>sh(edge,0.85+r()*0.25));}
+const DIRTP=[0x5a3a25,0x66432d,0x724c34,0x7e563b,0x8a5f43,0x966a4b];
+const pDirt=(s,r,g)=>{const n=fnoise(r,[0.3,0.4,0.3,0.3]);for(let i=0;i<256;i++)s(i&15,i>>4,ramp(DIRTP,n[i]));
+  for(let k=0;k<5;k++){const x=(r()*15)|0,y=(r()*15)|0,pc=r()<0.5?0x9c8c7a:0x8a7864;s(x,y,sh(pc,1.18));s(x+1,y,pc);s(x,y+1,sh(pc,0.86));s(x+1,y+1,0x4a3020);}for(let k=0;k<12;k++)s((r()*16)|0,(r()*16)|0,0x4a3020);};
+const GRASSP=[0x3a6e26,0x437a2c,0x4c8731,0x569437,0x60a03e,0x6dad48],SNOWP=[0xd2dcea,0xdde6f1,0xe7eef7,0xf0f5fb,0xf8fbff,0xffffff];
+const pGrassC=pal=>(s,r,g)=>{const n=fnoise(r,[0.35,0.35,0.3,0.35]);for(let i=0;i<256;i++)s(i&15,i>>4,ramp(pal,n[i]));for(let k=0;k<26;k++){const x=(r()*16)|0,y=(r()*16)|0;s(x,y,pal[pal.length-1]);s(x,(y+1)&15,pal[2]);}for(let k=0;k<14;k++)s((r()*16)|0,(r()*16)|0,pal[0]);};
+const pGrass=pGrassC(GRASSP);
+const STONEP=[0x686868,0x717171,0x7a7a7a,0x838383,0x8c8c8c,0x969696];
+const pStone=(s,r,g)=>{const n=fnoise(r,[0.35,0.4,0.25,0.22]);for(let i=0;i<256;i++)s(i&15,i>>4,ramp(STONEP,n[i]*0.9+0.05));
+  const dk=[],lt=[];for(let k=0;k<2;k++){let x=(r()*16)|0,y=(r()*16)|0;const dx=r()<0.5?1:-1,L=3+((r()*5)|0);for(let j=0;j<L;j++){dk.push([x&15,y&15]);lt.push([(x+1)&15,(y+1)&15]);if(r()<0.55)x+=dx;else y++;}}
+  lt.forEach(p=>s(p[0],p[1],0x929292));dk.forEach(p=>s(p[0],p[1],0x5e5e5e));};
+const pCobble=(s,r,g)=>pVor(s,r,10,[0x9a9a9a,0x8a8a8a,0xa6a6a6,0x7c7c7c,0x929292],0x484848);
+const pPlanksC=(base,gap)=>(s,r,g)=>{const gr=vnoise(r,8);for(let b=0;b<4;b++){const bc=sh(base,0.92+r()*0.14),seam=(b*7+3+((r()*3)|0))%16;
+    for(let yy=0;yy<4;yy++){const y=b*4+yy;for(let x=0;x<16;x++){let c;if(yy===3)c=sh(gap,0.9+r()*0.15);else{const gv=gr[((y*5)&15)*16+x];c=sh(bc,0.9+gv*0.18);if(gv>0.8)c=sh(bc,0.8);if(yy===0)c=sh(c,1.1);if(x===seam)c=sh(gap,1.1);else if(x===((seam+1)&15))c=sh(c,1.12);}s(x,y,c);}}
+    if(r()<0.7){s((seam+2)&15,b*4+1,sh(gap,0.8));s((seam+14)&15,b*4+1,sh(gap,0.8));}}};
+const pPlanks=pPlanksC(0xb08a52,0x6a4a28);
+const pLog=(pal)=>(s,r,g)=>{const col=vnoise(r,8),wob=vnoise(r,4),fn=fnoise(r);for(let y=0;y<16;y++)for(let x=0;x<16;x++){const xx=(x+Math.round((wob[y*16+x]-0.5)*3))&15;s(x,y,ramp(pal,col[xx]*0.72+fn[y*16+x]*0.38-0.05));}
+  for(let k=0;k<6;k++){const x=(r()*16)|0,y0=(r()*16)|0,L=3+((r()*7)|0);for(let j=0;j<L;j++){s(x,(y0+j)&15,pal[0]);s((x+1)&15,(y0+j)&15,pal[pal.length-1]);}}};
+const pLogTop=(bark,a,b)=>(s,r,g)=>{const wb=vnoise(r,4);for(let y=0;y<16;y++)for(let x=0;x<16;x++){const dx=x-7.5,dy=y-7.5,dm=Math.max(Math.abs(dx),Math.abs(dy)),de=Math.hypot(dx,dy);let c;
+    if(dm>6.6)c=sh(bark,(x===0||y===0)?1.12:(x===15||y===15)?0.72:0.9+r()*0.14);else{const d=de*0.55+dm*0.45+(wb[y*16+x]-0.5)*1.4;c=sh(((d*0.9)|0)%2?a:b,0.94+r()*0.08);if(de<1.3)c=sh(b,0.74);else if(dm>5.9)c=sh(a,0.78);}s(x,y,c);}};
+const pLeaves=(c,lo)=>(s,r,g)=>{lo=lo||0.55;const pal=[sh(c,lo),sh(c,lo+0.15),sh(c,lo*0.3+0.68),c,sh(c,1.12),sh(c,1.28)];const n=fnoise(r,[0.2,0.35,0.45,0.55]);const m=new Uint8Array(256);for(let i=0;i<256;i++)m[i]=n[i]<0.19?0:1;const M=(x,y)=>m[((y&15)<<4)|(x&15)];
+  for(let y=0;y<16;y++)for(let x=0;x<16;x++){if(!M(x,y)){s(x,y,0,0);continue;}let k=ramp(pal,(n[y*16+x]-0.19)/0.81);if(!M(x,y-1)||!M(x-1,y))k=sh(k,1.2);else if(!M(x,y+1)||!M(x+1,y))k=sh(k,0.68);s(x,y,k);}
+  for(let k=0;k<10;k++){const x=(r()*16)|0,y=(r()*16)|0;if(M(x,y))s(x,y,pal[5]);}};
+const pOre=(c,hi)=>(s,r,g)=>{pStone(s,r,g);const m=new Uint8Array(256);const M=(x,y)=>m[((y&15)<<4)|(x&15)];
+  const pts=[[3,3],[10,2],[6,8],[12,10],[2,12]];for(const q of pts){const x=q[0]+((r()*3)|0)-1,y=q[1]+((r()*3)|0)-1,w=2+((r()*2)|0),h=2+((r()*2)|0);for(let dy=0;dy<h;dy++)for(let dx=0;dx<w;dx++)if(!(w===3&&h===3&&(dx!==1&&dy!==1)&&r()<0.7))m[(((y+dy)&15)<<4)|((x+dx)&15)]=1;if(r()<0.6)m[(((y+h)&15)<<4)|((x+1)&15)]=1;}
+  for(let y=0;y<16;y++)for(let x=0;x<16;x++){if(M(x,y)){let k=c;if(!M(x,y-1)||!M(x-1,y))k=hi;else if(!M(x,y+1)||!M(x+1,y))k=sh(c,0.72);s(x,y,k);}else if(M(x-1,y)||M(x,y-1))s(x,y,sh(g(x,y),0.68));}
+  let sp=0;for(let i=0;i<256&&sp<3;i++){const j=(i*37+11)&255;if(m[j]&&r()<0.3){s(j&15,j>>4,0xffffff);sp++;}}};
+const pTopOn=(base,pal)=>(s,r,g)=>{base(s,r,g);let d=3;for(let x=0;x<16;x++){d=clamp(d+((r()*3)|0)-1,2,4);const dd=d+(r()<0.2?2:0);for(let y=0;y<dd;y++)s(x,y,y===0?pal[pal.length-1]:ramp(pal,r()*0.55+0.45-y*0.1));s(x,dd,sh(g(x,dd),0.6));}};
 const GREENS=[0x5fa83c,0x55993a,0x6ab845,0x4c8c33],SNOWS=[0xf4f8fc,0xe8eef6,0xffffff,0xeef3fa];
+const pBrick=(bw,bh,pal,mort)=>(s,r,g)=>{const n=fnoise(r),cc=[];for(let i=0;i<64;i++)cc.push(pal[(r()*pal.length)|0]);cells(s,(x,y)=>{const row=(y/bh)|0,off=row%2?bw/2:0,xx=x+off;if(y%bh===bh-1||xx%bw===bw-1)return-1;return row*8+((xx/bw)|0);},(c,x,y)=>sh(cc[c],0.9+n[y*16+x]*0.2),(x,y)=>sh(mort,0.9+r()*0.15));};
+const pWool=c=>(s,r,g)=>{const n=fnoise(r,[0.3,0.3,0.4,0.25]);for(let y=0;y<16;y++)for(let x=0;x<16;x++){let k=sh(c,0.86+n[y*16+x]*0.22);if((x+(y>>1))%3===0)k=sh(k,0.92);if(y%2===0&&x%4===1)k=sh(k,1.07);s(x,y,k);}};
 function pFlower(pc,cc){return(s,r)=>{for(let y=9;y<16;y++)s(7,y,0x3e8a2e);s(6,12,0x4c9c38);s(5,11,0x4c9c38);s(8,13,0x4c9c38);s(9,12,0x4c9c38);
   for(let y=4;y<9;y++)for(let x=5;x<10;x++){const d=Math.abs(x-7)+Math.abs(y-6);if(d<=2)s(x,y,d===0?cc:sh(pc,0.9+r()*0.2));}s(5,4,pc);s(9,4,pc);s(5,8,pc);s(9,8,pc);};}
-tile('grass_top',pGrass);tile('dirt',pDirt);tile('grass_side',pTopOn(pDirt,GREENS));tile('stone',pStone);tile('cobble',pCobble);
-tile('sand',(s,r)=>speck(s,r,[0xe3d6a0,0xdccf96,0xeadfae,0xd6c88c,0xe3d6a0]));
-tile('water',(s,r)=>{speck(s,r,[0x2f62d4,0x3568d8,0x2c5ccc,0x3a70de],170);for(let i=0;i<5;i++){const x=(r()*12)|0,y=(r()*16)|0;for(let k=0;k<4;k++)s(x+k,y,0x6f9cf0,185);}});
-tile('log_side',pLog([0x6b5030,0x5c4428,0x77593a,0x4f3a22]));tile('log_top',pLogTop(0x5c4428,0xb8945a,0x9c7a45));
+tile('grass_top',pGrass);tile('dirt',pDirt);tile('grass_side',pTopOn(pDirt,GRASSP));tile('stone',pStone);tile('cobble',pCobble);
+const SANDP=[0xcfbf86,0xd7c88f,0xdecf99,0xe4d7a3,0xeaddad,0xf0e5b8];
+tile('sand',pField(SANDP,[0.25,0.3,0.45,0.5],(s,r)=>{for(let k=0;k<14;k++)s((r()*16)|0,(r()*16)|0,r()<0.5?0xb9a66e:0xf6eecb);}));
+tile('water',pField([0x2450bc,0x2a59c6,0x3062cf,0x376cd8,0x4078e0],[0.4,0.4,0.2,0.1],(s,r)=>{const n=fnoise(r);for(let i=0;i<256;i++){const x=i&15,y=i>>4;const v=n[i];s(x,y,v<0.25?0x2450bc:v<0.5?0x2c5cc8:v<0.75?0x3466d2:0x3e74dc,165+((v*20)|0));}for(let k=0;k<6;k++){const x=(r()*13)|0,y=(r()*15)|0,L=3+((r()*3)|0);for(let j=0;j<L;j++){s(x+j,y,0x8cb6f6,195);s(x+j,y+1,0x2048b0,180);}}}));
+tile('log_side',pLog([0x3e2c18,0x4e3920,0x5c4428,0x6a5030,0x775b38,0x84663f]));tile('log_top',pLogTop(0x5c4428,0xbc9860,0x9e7c48));
 tile('leaves',pLeaves(0x3f8f2c));tile('planks',pPlanks);
-tile('bedrock',(s,r)=>speck(s,r,[0x555555,0x333333,0x777777,0x222222,0x444444]));
-tile('coal_ore',pOre(0x2a2a2a));tile('iron_ore',pOre(0xd8a882));tile('gold_ore',pOre(0xf4d43c));tile('diamond_ore',pOre(0x58e8e0));
-tile('snow',(s,r)=>speck(s,r,SNOWS));tile('snow_side',pTopOn(pDirt,SNOWS));
-tile('sandstone_side',(s,r)=>{for(let y=0;y<16;y++)for(let x=0;x<16;x++){let c=0xd9c98e;if(y===0||y===8)c=0xe8dba6;if(y===4||y===5||y===12)c=0xcbb97a;if(y===15||y===7)c=0xb8a468;s(x,y,sh(c,0.96+r()*0.08));}});
-tile('sandstone_top',(s,r)=>speck(s,r,[0xdccf96,0xd6c88c,0xe3d6a0]));
-tile('gravel',(s,r)=>pVor(s,r,26,[0x8e8782,0x7b7572,0xa09a95,0x6d6763,0x968a80],0x625c58));
+tile('bedrock',(s,r)=>pVor(s,r,12,[0x4a4a4a,0x3a3a3a,0x5a5a5a,0x2e2e2e,0x666666],0x141414,0.8));
+tile('coal_ore',pOre(0x252525,0x505050));tile('iron_ore',pOre(0xc8946e,0xf0c8a6));tile('gold_ore',pOre(0xe6be2c,0xfff28a));tile('diamond_ore',pOre(0x30c8c8,0xb8fffa));
+tile('snow',pField(SNOWP,[0.4,0.35,0.25,0.25],(s,r)=>{for(let k=0;k<8;k++)s((r()*16)|0,(r()*16)|0,0xffffff);for(let k=0;k<6;k++)s((r()*16)|0,(r()*16)|0,0xc6d2e4);}));tile('snow_side',pTopOn(pDirt,SNOWP));
+tile('sandstone_side',(s,r)=>{const n=fnoise(r);for(let y=0;y<16;y++)for(let x=0;x<16;x++){let c=0xd9c98e;if(y<2)c=0xe7d9a4;else if(y===2)c=0xc6b277;else if(y===6||y===7)c=0xd0be86;else if(y===12||y===13)c=0xcfbd83;else if(y===14)c=0xbca86c;else if(y===15)c=0xa8945a;s(x,y,sh(c,0.94+n[y*16+x]*0.12));}});
+tile('sandstone_top',pField([0xcfbf86,0xd6c78e,0xdccf96,0xe3d6a0],[0.4,0.4,0.2,0.3],(s,r)=>{for(let i=0;i<16;i++){s(i,0,0xe8dcaa);s(0,i,0xe8dcaa);s(i,15,0xb8a468);s(15,i,0xb8a468);}}));
+tile('gravel',(s,r)=>pVor(s,r,24,[0x8e8782,0x7f7975,0x9c9691,0x76706b,0x968a80,0x857e7a],0x625c57,0.75));
 tile('glass',(s,r)=>{for(let y=0;y<16;y++)for(let x=0;x<16;x++)s(x,y,0,0);for(let i=0;i<16;i++){s(i,0,0xd4eef6);s(i,15,0xa8ccd8);s(0,i,0xd4eef6);s(15,i,0xa8ccd8);}
   [[3,4],[4,3],[5,2],[3,6],[4,5],[5,4],[6,3],[11,12],[12,11],[10,13]].forEach(p=>s(p[0],p[1],0xffffff));});
 tile('craft_top',(s,r)=>{pPlanks(s,r);for(let i=0;i<16;i++){s(i,0,0x5e4020);s(i,15,0x5e4020);s(0,i,0x5e4020);s(15,i,0x5e4020);if(i>0&&i<15){s(i,5,0x7a5a30);s(i,10,0x7a5a30);s(5,i,0x7a5a30);s(10,i,0x7a5a30);}}});
@@ -64,21 +92,25 @@ tile('tallgrass',(s,r)=>{for(let y=0;y<16;y++)for(let x=0;x<16;x++)s(x,y,0,0);fo
 tile('deadbush',(s,r)=>{for(let y=0;y<16;y++)for(let x=0;x<16;x++)s(x,y,0,0);for(let i=0;i<6;i++){let x=7.5,y=15;const dx=(r()-0.5)*1.4;const h=5+r()*8;for(let k=0;k<h;k++){s(x|0,y|0,r()<0.5?0x8a6a3a:0x6e5028);x+=dx;y-=1;}}});
 tile('cactus_side',(s,r)=>{for(let y=0;y<16;y++)for(let x=0;x<16;x++){let c=x%4===1?0x3c7e2c:0x4f9a3a;if(x%4===3&&(y+x)%5===0)c=0xd8e8b0;s(x,y,sh(c,0.95+r()*0.1));}});
 tile('cactus_top',(s,r)=>{for(let y=0;y<16;y++)for(let x=0;x<16;x++){const d=Math.max(Math.abs(x-7.5),Math.abs(y-7.5));s(x,y,d>6?0x3c7e2c:d>4?0x5aa844:0x4f9a3a);}});
-tile('ice',(s,r)=>{speck(s,r,[0xa8cdf5,0x9cc4f0,0xb6d8fa]);for(let i=0;i<6;i++){const x=(r()*12)|0,y=(r()*12)|0;for(let k=0;k<4;k++)s(x+k,y+k,0xd8ecff);}});
-tile('bricks',(s,r)=>{for(let y=0;y<16;y++)for(let x=0;x<16;x++){const row=y>>2;let c=sh(0x8e8e8e,0.9+r()*0.15);if(y%4===3||(x+(row%2)*4)%8===7)c=0x5c5c5c;else if(y%4===0)c=sh(c,1.12);s(x,y,c);}});
-tile('birch_side',(s,r)=>{pLog([0xe4e2d8,0xd8d6cc,0xeeece2])(s,r);for(let i=0;i<9;i++){const x=(r()*13)|0,y=(r()*16)|0;for(let k=0;k<2+((r()*3)|0);k++)s(x+k,y,0x3a3a34);}});
+const pIce=(pal,crack)=>(s,r,g)=>{pField(pal,[0.5,0.3,0.2,0.12])(s,r,g);for(let i=0;i<3;i++){let x=(r()*16)|0,y=(r()*16)|0;const L=4+((r()*6)|0),dx=r()<0.5?1:-1;for(let k=0;k<L;k++){const c=g(x,y);s(x&15,y&15,mixC(c,crack,0.55));x+=dx;if(r()<0.75)y++;}}for(let k=0;k<5;k++)s((r()*16)|0,(r()*16)|0,0xf4faff);};
+function mixC(a,b,t){const f=k=>((((a>>k)&255)*(1-t)+((b>>k)&255)*t)|0);return f(16)<<16|f(8)<<8|f(0);}
+tile('ice',pIce([0x8cb8ec,0x98c2f0,0xa4ccf4,0xb2d6f8,0xc0e0fb],0xe4f2ff));
+tile('bricks',(s,r,g)=>{pBrick(16,8,[0x8a8a8a,0x828282,0x929292,0x7a7a7a],0x4e4e4e)(s,r,g);for(let k=0;k<4;k++){s(3+k,4+(k>>1),0x666666);}});
+tile('birch_side',(s,r,g)=>{pLog([0xc8c6bc,0xd8d6cc,0xe2e0d6,0xeceae0,0xf4f2ea])(s,r,g);for(let i=0;i<9;i++){const x=(r()*13)|0,y=(r()*16)|0,L=2+((r()*4)|0);for(let k=0;k<L;k++){s(x+k,y,0x2e2e2a);if(r()<0.5)s(x+k,y+1,0x5a5a52);}}});
 tile('birch_top',pLogTop(0xd8d6cc,0xd8c08a,0xc4aa72));tile('birch_leaves',pLeaves(0x6aa83c));
-tile('spruce_side',pLog([0x4a341e,0x3e2a16,0x543c24]));tile('spruce_top',pLogTop(0x3e2a16,0x9a7848,0x80603a));tile('spruce_leaves',pLeaves(0x2c5e3a));
-tile('obsidian',(s,r)=>speck(s,r,[0x1a1226,0x241a35,0x120c1c,0x2e2244,0x1a1226]));
-tile('wool',(s,r)=>{speck(s,r,[0xf2f2f2,0xe6e6e6,0xfafafa,0xdcdcdc]);});
+tile('spruce_side',pLog([0x2e1f10,0x3a2816,0x46321c,0x523c22,0x5e4628]));tile('spruce_top',pLogTop(0x3e2a16,0x9a7848,0x80603a));tile('spruce_leaves',pLeaves(0x2c5e3a));
+tile('obsidian',pField([0x0c0814,0x120c1c,0x1a1228,0x221834,0x2c2042],[0.3,0.4,0.3,0.3],(s,r)=>{for(let k=0;k<5;k++){const x=(r()*14)|0,y=(r()*15)|0;s(x,y,0x6a58a8);s(x+1,y,0x4a3c7a);s(x,y+1,0x3a2e60);}}));
+tile('wool',pWool(0xf0f0f0));
 tile('lumen',(s,r)=>{pVor(s,r,8,[0xffe890,0xffd860,0xfff4c0],0xd89a30);});
 
 const pChest=front=>(s,r)=>{for(let y=0;y<16;y++)for(let x=0;x<16;x++){let c=sh(0x9a6a2c,0.92+r()*0.14);if(x===0||y===0||x===15||y===15)c=0x4a3010;else if(y===5)c=0x5e3e16;else if(x===1||y===1)c=sh(c,1.15);s(x,y,c);}if(front)for(let y=4;y<8;y++)for(let x=7;x<9;x++)s(x,y,y<5?0xe8e8e8:0xb0b0b0);};
 tile('chest_side',pChest(false));tile('chest_front',pChest(true));
 tile('chest_top',(s,r)=>{for(let y=0;y<16;y++)for(let x=0;x<16;x++){let c=sh(0x9a6a2c,0.92+r()*0.14);if(x===0||y===0||x===15||y===15)c=0x4a3010;else if(x===1||y===1)c=sh(c,1.15);s(x,y,c);}});
-const pMetal=c=>(s,r)=>{for(let y=0;y<16;y++)for(let x=0;x<16;x++){let k=sh(c,0.95+r()*0.08);if(x===0||y===0)k=sh(c,1.2);else if(x===15||y===15)k=sh(c,0.68);else if((x+y)%7===0)k=sh(c,1.12);s(x,y,k);}};
+const pMetal=c=>(s,r)=>{const n=fnoise(r,[0.3,0.3,0.4,0.1]);for(let y=0;y<16;y++)for(let x=0;x<16;x++){let k=sh(c,0.9+n[y*16+x]*0.14);const e=Math.min(x,y,15-x,15-y);
+    if(e===0)k=(x===15||y===15)?sh(c,0.58):sh(c,1.25);else if(e===1)k=(x===14||y===14)?sh(c,0.8):sh(c,1.1);else if(Math.abs(x-y)<1.6&&x<10||Math.abs(x-y+5)<0.6&&x<6)k=sh(k,1.16);s(x,y,k);}
+  [[3,3],[12,3],[3,12],[12,12]].forEach(p=>{s(p[0],p[1],sh(c,1.35));s(p[0]+1,p[1]+1,sh(c,0.6));});};
 tile('iron_block',pMetal(0xd0d0d0));tile('gold_block',pMetal(0xf0c832));tile('diamond_block',pMetal(0x58dcd4));
-tile('mossy',(s,r)=>{pCobble(s,r);for(let i=0;i<60;i++)s((r()*16)|0,(r()*16)|0,r()<0.5?0x4c8c33:0x3e7a2a);});
+tile('mossy',(s,r,g)=>{pCobble(s,r,g);const n=fnoise(r);for(let i=0;i<256;i++)if(n[i]>0.52)s(i&15,i>>4,ramp([0x355f22,0x3f6e28,0x4a7e2e,0x568e36,0x64a03e],(n[i]-0.52)/0.48+r()*0.2));});
 tile('bed_top',(s,r)=>{for(let y=0;y<16;y++)for(let x=0;x<16;x++)s(x,y,y<5?(x>1&&x<14&&y>0?0xf4f4f0:0xd8d8d0):sh(y===5?0x8a1c1c:0xb82a2a,0.94+r()*0.1));});
 tile('bed_side',(s,r)=>{for(let y=0;y<16;y++)for(let x=0;x<16;x++)s(x,y,y<11?sh(0xb82a2a,0.9+r()*0.1):(y>12&&x>2&&x<13?0x000000:sh(0x9c7a45,0.9+r()*0.1)),y>12&&x>2&&x<13?0:255);});
 
@@ -86,20 +118,20 @@ tile('charge_side',(s,r)=>{for(let y=0;y<16;y++)for(let x=0;x<16;x++){let c=sh(0
 tile('charge_top',(s,r)=>{for(let y=0;y<16;y++)for(let x=0;x<16;x++){const d=Math.hypot(x-7.5,y-7.5);s(x,y,d<1.6?0x2a2222:d<3?0xffd23a:sh(0xc8402a,0.9+r()*0.12+(x%4===0||y%4===0?-0.2:0)));}});
 tile('sapling',(s,r)=>{for(let y=0;y<16;y++)for(let x=0;x<16;x++)s(x,y,0,0);for(let y=9;y<16;y++){s(7,y,0x6b5030);s(8,y,0x5c4428);}for(let y=2;y<11;y++)for(let x=3;x<13;x++){const d=Math.hypot(x-7.5,(y-6)*1.2);if(d<4.6&&r()<0.82)s(x,y,sh(0x3f8f2c,r()<0.3?0.75:r()<0.5?1.2:1));}});
 
-[['wool_r',0xc83a34],['wool_y',0xe8c82c],['wool_b',0x3a5cd0],['wool_g',0x4a9a3a],['wool_k',0x2c2c32]].forEach(w=>tile(w[0],(s,r)=>speck(s,r,[w[1],sh(w[1],0.92),sh(w[1],1.08),sh(w[1],0.85)])));
+[['wool_r',0xc83a34],['wool_y',0xe8c82c],['wool_b',0x3a5cd0],['wool_g',0x4a9a3a],['wool_k',0x2c2c32]].forEach(w=>tile(w[0],pWool(w[1])));
 tile('bookshelf',(s,r)=>{pPlanks(s,r);const cols=[0xb83a2a,0x2a6ab8,0x3a9a4a,0xd8b030,0x7a3a9a,0x8a5a30];for(const y0 of[2,9]){for(let x=1;x<15;x++){const c=cols[(r()*cols.length)|0],hgt=4+((r()*2)|0);for(let y=0;y<6;y++)s(x,y0+y,y<6-hgt?0x3a2a14:(y===6-hgt+1?sh(c,1.3):sh(c,x%2?1:0.85)));}}});
-tile('redbrick',(s,r)=>{for(let y=0;y<16;y++)for(let x=0;x<16;x++){const row=y>>2;let c=sh(0xa8503c,0.88+r()*0.2);if(y%4===3||(x+(row%2)*4)%8===7)c=0xcfc6b8;s(x,y,c);}});
+tile('redbrick',pBrick(8,4,[0x9a4a36,0xa8523c,0xb05a42,0x8e4232,0xa04e3a],0xbdb4a4));
 
 const pEmber=(s,r)=>{speck(s,r,[0x5a1e1e,0x6a2626,0x4c1818,0x722c2a,0x5a1e1e]);for(let i=0;i<8;i++){const x=(r()*14)|0,y=(r()*14)|0;s(x,y,0x3a1010);s(x+1,y,0x3a1010);s(x,y+1,0x84342e);}};
 tile('emberstone',pEmber);
 tile('ashsand',(s,r)=>speck(s,r,[0x4a3e3a,0x54463f,0x403632,0x5c4e46]));
 tile('emberquartz',(s,r)=>{pEmber(s,r);for(let i=0;i<6;i++){const x=1+((r()*13)|0),y=1+((r()*13)|0);s(x,y,0xfff0d0);s(x+1,y,0xffc860);s(x,y+1,0xff9a30);if(r()<0.5)s(x+1,y+1,0xfff0d0);}});
 tile('rift',(s,r)=>{for(let y=0;y<16;y++)for(let x=0;x<16;x++){const v=Math.sin(x*0.9+Math.sin(y*0.8)*2.4)+Math.cos(y*0.8-x*0.35)+r()*0.6;s(x,y,v>1.1?0xb8fff0:v>0.3?0x2ee0b8:v>-0.5?0x14a890:0x0c6a70,v>1.1?230:185);}});
-tile('redsand',(s,r)=>speck(s,r,[0xc0683a,0xb85e34,0xca7444,0xae562e]));
-[['clay_a',0xb5603c],['clay_b',0xd8a070],['clay_c',0x8a4a36],['clay_d',0xe0c8a0]].forEach(w=>tile(w[0],(s,r)=>{for(let y=0;y<16;y++)for(let x=0;x<16;x++)s(x,y,sh(w[1],0.95+r()*0.08+(y===15?-0.08:0)));}));
+tile('redsand',pField([0xa8502a,0xb45c32,0xbe6639,0xc87242,0xd27e4c],[0.25,0.3,0.45,0.5],(s,r)=>{for(let k=0;k<12;k++)s((r()*16)|0,(r()*16)|0,r()<0.5?0x8e4222:0xe0946a);}));
+[['clay_a',0xb5603c],['clay_b',0xd8a070],['clay_c',0x8a4a36],['clay_d',0xe0c8a0]].forEach(w=>tile(w[0],(s,r)=>{const n=fnoise(r,[0.2,0.3,0.5,0.2]),ph=r()*6;for(let y=0;y<16;y++)for(let x=0;x<16;x++)s(x,y,sh(w[1],0.93+n[y*16+x]*0.1+Math.sin(y*1.3+ph+x*0.08)*0.035+(y===15?-0.1:y===0?0.06:0)));}));
 
-const OLIVE=[0x4f7a34,0x466e30,0x587f3a,0x3e642a];
-tile('sgrass_top',(s,r)=>speck(s,r,OLIVE));tile('sgrass_side',pTopOn(pDirt,OLIVE));
+const OLIVE=[0x395a24,0x41662a,0x4a7230,0x537e36,0x5c8a3c,0x689646];
+tile('sgrass_top',pGrassC(OLIVE));tile('sgrass_side',pTopOn(pDirt,OLIVE));
 const pMush=(cap,dot)=>(s,r)=>{for(let y=0;y<16;y++)for(let x=0;x<16;x++)s(x,y,0,0);for(let y=10;y<16;y++){s(7,y,0xe8e0d0);s(8,y,0xcfc6b4);}for(let y=5;y<11;y++)for(let x=3;x<13;x++){const dx=(x-7.5)/5,dy=(y-10)/5.5;if(dx*dx+dy*dy<1)s(x,y,y===10?sh(cap,0.7):((x*3+y*5)%7===0?dot:cap));}};
 tile('mush_r',pMush(0xc83028,0xffffff));tile('mush_b',pMush(0x9a7450,0xb48a62));
 
@@ -111,6 +143,22 @@ tile('door',(s,r)=>{for(let y=0;y<16;y++)for(let x=0;x<16;x++){let c=sh(0x8a6a38
 tile('ladder',(s,r)=>{for(let y=0;y<16;y++)for(let x=0;x<16;x++){const rail=x===2||x===3||x===12||x===13,rung=y%4===1&&x>1&&x<14;s(x,y,rail?(x%2?0x6b4f2a:0x8b6b3d):0x9c7a45,rail||rung?255:0);}});
 
 tile('cage',(s,r)=>{for(let y=0;y<16;y++)for(let x=0;x<16;x++){const bar=x%4===0||y%4===0||x===15||y===15;s(x,y,bar?((x+y)%2?0x2a3440:0x3a4656):0x101418,bar?255:0);}s(7,7,0xff7a1a);s(8,7,0xffd23a);s(7,8,0xffd23a);s(8,8,0xff7a1a);});
+// ---- blocks for the Blossom Grove, Sporelands and Frost Spires ----
+tile('blossom_side',pLog([0x2e1a1c,0x3a2224,0x482c2e,0x553638,0x624042]));tile('blossom_top',pLogTop(0x482c2e,0xe2b4a6,0xc9968c));
+tile('blossom_leaves',(s,r,g)=>{pLeaves(0xf0a4c6,0.74)(s,r,g);for(let k=0;k<5;k++){const x=(r()*16)|0,y=(r()*16)|0;if(g(x,y)>=0)s(x,y,0xfff0f6);}});
+tile('blossom_planks',pPlanksC(0xd49c90,0x84504a));
+const SPOREP=[0x4e4054,0x5a4a60,0x66546c,0x725e78,0x7e6a84,0x8c7892];
+tile('spore_top',pField(SPOREP,[0.35,0.35,0.3,0.4],(s,r)=>{for(let k=0;k<18;k++){const x=(r()*16)|0,y=(r()*16)|0;s(x,y,r()<0.6?0xbaa8c6:0x3a2e40);}}));tile('spore_side',pTopOn(pDirt,SPOREP));
+tile('cap_red',(s,r,g)=>{pField([0x941a16,0xa8201c,0xb82822,0xc8302a,0xd63a32],[0.4,0.4,0.2,0.2])(s,r,g);const m=new Uint8Array(256);const M=(x,y)=>m[((y&15)<<4)|(x&15)];
+  [[4,4,2.1],[11.5,3,1.4],[12,11.5,2.2],[4,12.5,1.5],[8.5,8,1.1],[15.5,7,1.2]].forEach(p=>{for(let y=0;y<16;y++)for(let x=0;x<16;x++){let dx=Math.abs(x+0.5-p[0]),dy=Math.abs(y+0.5-p[1]);if(dx>8)dx=16-dx;if(dy>8)dy=16-dy;if(dx*dx+dy*dy<p[2]*p[2])m[y*16+x]=1;}});
+  for(let y=0;y<16;y++)for(let x=0;x<16;x++)if(M(x,y))s(x,y,!M(x,y-1)||!M(x-1,y)?0xffffff:!M(x,y+1)||!M(x+1,y)?0xc8bcb0:0xf0e8de);else if(M(x-1,y-1))s(x,y,sh(g(x,y),0.7));});
+tile('cap_stem',(s,r,g)=>{const col=vnoise(r,8),n=fnoise(r);for(let y=0;y<16;y++)for(let x=0;x<16;x++)s(x,y,ramp([0xc0b498,0xcec2a6,0xdad0b6,0xe4dac2,0xeee6d2],col[x]*0.6+n[y*16+x]*0.45));});
+tile('glacial_ice',pIce([0x4876cc,0x5482d4,0x6290dc,0x709ee4,0x80acec],0xc4e2ff));
+tile('frost_bricks',pBrick(8,4,[0xa8d0f4,0x9cc6f0,0xb4d8f8,0x92bcea],0xe8f4ff));
+tile('glowcap',(s,r)=>{for(let y=0;y<16;y++)for(let x=0;x<16;x++)s(x,y,0,0);const mush=(cx,top,w)=>{for(let y=top+2;y<16;y++){s(cx,y,0xd8e8e4);s(cx+1,y,0xa8c0bc);}for(let y=top;y<top+3;y++)for(let x=cx-w;x<=cx+1+w;x++){if(y===top&&(x===cx-w||x===cx+1+w))continue;s(x,y,y===top?0xc8fff4:y===top+2?0x1a9a8e:((x+y)%3?0x3ae0cc:0x8af8ea));}};
+  mush(3,8,2);mush(10,4,2);for(let k=0;k<5;k++)s(1+((r()*14)|0),1+((r()*6)|0),0xe8fffa);});
+tile('petals',(s,r)=>{for(let y=0;y<16;y++)for(let x=0;x<16;x++)s(x,y,0,0);for(let k=0;k<6;k++){const x=1+((r()*13)|0);for(let y=11;y<16;y++)s(x,y,y<13?0x5a9a38:0x3e7a28);}
+  for(let k=0;k<8;k++){const x=1+((r()*12)|0),y=7+((r()*7)|0);s(x,y,0xf4a8c8);s(x+1,y,0xfcc8dc);s(x,y+1,0xd8789e);s(x+1,y+1,0xf0a0c0);if(r()<0.5)s(x+1,y,0xfff4f8);}});
 tile('reeds',(s,r)=>{for(let y=0;y<16;y++)for(let x=0;x<16;x++)s(x,y,0,0);for(const x of[3,7,11]){for(let y=0;y<16;y++){s(x,y,y%5===0?0x6a9a3a:0x8ac850);s(x+1,y,y%5===0?0x5a8a30:0x74b040);}s(x+2,4+x%3,0x8ac850);s(x-1,10-x%4,0x8ac850);}});
 
 // ================= BLOCKS =================
@@ -190,6 +238,17 @@ blk(77,'Monster Cage','cage',{hard:4,tool:'pick',tier:1,trans:1,drop:0,light:4})
 blk(78,'Reeds','reeds',{shape:2,hard:0,snd:'grass',keep:1});
 [[79,'Plank Stairs','planks','axe','wood'],[80,'Cobblestone Stairs','cobble','pick','stone'],[81,'Brick Stairs','redbrick','pick','stone']].forEach(s=>{blk(s[0],s[1],s[2],{shape:6,hard:1.5,tool:s[3],snd:s[4],tier:s[3]==='pick'?1:0});SOLID[s[0]]=1;REPL[s[0]]=0;OPAC[s[0]]=0;});
 blk(82,'Fence','planks',{shape:7,hard:1.5,tool:'axe',snd:'wood'});SOLID[82]=1;REPL[82]=0;OPAC[82]=0;
+blk(83,'Blossom Log',['blossom_top','blossom_top','blossom_side'],{hard:2,tool:'axe',snd:'wood'});
+blk(84,'Blossom Leaves','blossom_leaves',{hard:0.2,trans:1,opac:1,snd:'grass',drop:0,leaf:1});
+blk(85,'Blossom Planks','blossom_planks',{hard:2,tool:'axe',snd:'wood'});
+blk(86,'Spore Turf',['spore_top','dirt','spore_side'],{hard:0.6,tool:'shovel',snd:'grass',drop:2});
+blk(87,'Toadstool Cap','cap_red',{hard:0.3,tool:'axe',snd:'cloth',drop:67});
+blk(88,'Toadstool Stem','cap_stem',{hard:0.4,tool:'axe',snd:'wood'});
+blk(89,'Glacial Ice','glacial_ice',{hard:0.8,tool:'pick',snd:'glass'});
+blk(90,'Glowcap','glowcap',{shape:2,hard:0,snd:'grass',light:9});
+blk(91,'Petal Tuft','petals',{shape:2,hard:0,snd:'grass'});
+blk(92,'Frost Bricks','frost_bricks',{hard:1.5,tool:'pick',tier:1,snd:'glass'});
+Object.assign(B,{BLOSSOM_LOG:83,BLOSSOM_LEAVES:84,BLOSSOM_PLANKS:85,SPORE:86,CAP:87,STEM:88,GICE:89,GLOWCAP:90,PETALS:91,FROST_BRICKS:92});
 Object.assign(B,{FENCE:82,CAGE:77,REEDS:78,LADDER:76,DOOR:74,DOOR_O:75,FARMLAND:69,CROP:70,SGRASS:66,EMBERSTONE:57,ASH:58,EQUARTZ:59,RIFT:60,REDSAND:61,
 CHARGE:46,SAPLING:47,CHEST:40,IRON_BLOCK:41,GOLD_BLOCK:42,DIAMOND_BLOCK:43,MOSSY:44,BED:45});
 const LOGS=[7,30,32];
@@ -235,7 +294,7 @@ const fishP=(c)=>(s,r)=>{for(let y=4;y<12;y++)for(let x=2;x<11;x++){const dx=(x-
 item(285,'Raw Fish',fishP(0x4a8ac8),{food:2});item(286,'Cooked Fish',fishP(0xc8884a),{food:6});
 const armorP=c=>(s,r)=>{for(let y=2;y<14;y++)for(let x=2;x<14;x++){const arm=(x<5||x>10)&&y<7,body=x>=4&&x<=11&&y>=3,neck=y<4&&x>5&&x<10;if((arm||body)&&!neck)s(x,y,x<6?sh(c,1.2):x>9?sh(c,0.75):c);}};
 item(287,'Leather Tunic',armorP(0x9a5a2a),{stack:1,armor:0.2});item(288,'Iron Armor',armorP(0xc8c8c8),{stack:1,armor:0.4});item(289,'Diamond Armor',armorP(0x4fe0d8),{stack:1,armor:0.6});
-const EGGS=[['cow','Cow',0x4a3526,0xe8e4dc],['pig','Pig',0xe8a0a0,0x9a5a5a],['sheep','Sheep',0xf0f0ec,0xd8bca0],['chicken','Chicken',0xf8f8f8,0xd82a2a],['warden','Ember Warden',0x2e2a2a,0xffd84a],['wolf','Wolf',0xc8c8c4,0xa8a8a2],['settler','Settler',0x6a4a2e,0xb89a4a],['sentinel','Sentinel',0x8a8a84,0x4ad8ff],['fish','Fish',0x4a8ac8,0xd8e8f0],['zombie','Zombie',0x6f9a5a,0x6a4a8a],['skeleton','Skeleton',0xd4d4c8,0x55554c],['spider','Spider',0x2a2422,0xd82020],['ember','Emberling',0x2e2a2a,0xff7a1a],['wisp','Cinder Wisp',0xff8a1a,0xfff4c0]];
+const EGGS=[['cow','Cow',0x4a3526,0xe8e4dc],['pig','Pig',0xe8a0a0,0x9a5a5a],['sheep','Sheep',0xf0f0ec,0xd8bca0],['chicken','Chicken',0xf8f8f8,0xd82a2a],['warden','Ember Warden',0x2e2a2a,0xffd84a],['wolf','Wolf',0xc8c8c4,0xa8a8a2],['settler','Settler',0x6a4a2e,0xb89a4a],['sentinel','Sentinel',0x8a8a84,0x4ad8ff],['fish','Fish',0x4a8ac8,0xd8e8f0],['zombie','Zombie',0x6f9a5a,0x6a4a8a],['skeleton','Skeleton',0xd4d4c8,0x55554c],['spider','Spider',0x2a2422,0xd82020],['ember','Emberling',0x2e2a2a,0xff7a1a],['wisp','Cinder Wisp',0xff8a1a,0xfff4c0],['sporeback','Sporeback',0x6a5470,0xc8302a],['petalwing','Petalwing',0xf4a8c8,0xfff4f8],['rimewalker','Rimewalker',0xa8d0f4,0x2ee0f0]];
 EGGS.forEach((e,i)=>item(330+i,'Spawn '+e[1],blob(e[2],4.4,5.6,(s,r)=>{for(let k=0;k<7;k++){const x=5+((r()*6)|0),y=4+((r()*8)|0);s(x,y,e[3]);if(r()<0.5)s(x+1,y,e[3]);}})));
 item(350,'Shears',(s,r)=>{for(let i=0;i<7;i++){s(4+i,3+i,0xd0d0d0);s(11-i,3+i,0xb0b0b0);}for(const c of[[4,11],[10,11]]){s(c[0],c[1],0x8a3a2a);s(c[0]+1,c[1],0x8a3a2a);s(c[0],c[1]+2,0x8a3a2a);s(c[0]+1,c[1]+2,0x8a3a2a);s(c[0]-1,c[1]+1,0x8a3a2a);s(c[0]+2,c[1]+1,0x8a3a2a);}},{stack:1});
 item(351,'Paper',(s,r)=>{for(let y=3;y<13;y++)for(let x=4;x<12;x++)s(x,y,y%3===1&&x>5&&x<10?0xb8b8b0:0xf4f0e4);});
@@ -247,8 +306,8 @@ item(279,'Arrow',(s,r)=>{for(let i=0;i<10;i++)s(3+i,12-i,0x8b6b3d);s(13,2,0xd0d0
 item(280,'Bow',(s,r)=>{for(let y=0;y<16;y++)for(let x=0;x<16;x++){const d=Math.hypot(x-2,y-13);if(d>10.3&&d<12.3&&x>2&&y<13)s(x,y,d>11.3?0x6b4f2a:0x8b6b3d);}for(let i=0;i<10;i++)s(3+i,2+i,0xe8e8e8);},{stack:1});
 IT[350].tool={type:'shears',tier:1,sp:1,dur:238,dmg:1};
 MATS.forEach((m,mi)=>TTYPES.forEach((t,ti)=>item(300+mi*4+ti,m.n+' '+TNAMES[ti],toolPaint(ti,m.c),{stack:1,tool:{type:t,tier:m.tier,sp:m.sp,dur:m.dur,dmg:ti===3?m.dmg:ti===1?m.dmg-1:2}})));
-IT[9].fuel=15;IT[7].fuel=15;IT[30].fuel=15;IT[32].fuel=15;IT[256].fuel=5;IT[20].fuel=15;
-const SMELT={285:286,12:258,13:259,5:19,4:3,7:257,30:257,32:257,261:262,263:264,265:266,267:268,11:257,14:260};
+IT[9].fuel=15;IT[7].fuel=15;IT[30].fuel=15;IT[32].fuel=15;IT[256].fuel=5;IT[20].fuel=15;IT[83].fuel=15;IT[85].fuel=15;IT[88].fuel=10;
+const SMELT={285:286,12:258,13:259,5:19,4:3,7:257,30:257,32:257,83:257,261:262,263:264,265:266,267:268,11:257,14:260};
 
 // icons
 const iconCache={},iconUrlCache={};
@@ -259,6 +318,8 @@ function iconCanvas(id){if(iconCache[id])return iconCache[id];const c=document.c
   }else{const p=iconPaint[id];const t=document.createElement('canvas');t.width=t.height=16;const tx=t.getContext('2d');const img=tx.createImageData(16,16),d=img.data;
     const set=(px,py,col,a)=>{if(px<0||py<0||px>15||py>15)return;const i=(py*16+px)*4;d[i]=(col>>16)&255;d[i+1]=(col>>8)&255;d[i+2]=col&255;d[i+3]=a===undefined?255:a;};
     p(set,rng32(id*77));const o=new Uint8Array(256);for(let i=0;i<256;i++)o[i]=d[i*4+3]>0?1:0;
+    const O=(xx,yy)=>xx>=0&&yy>=0&&xx<16&&yy<16&&o[yy*16+xx];// rim light on the top-left edge, rim shade on the bottom-right edge
+    for(let yy=0;yy<16;yy++)for(let xx=0;xx<16;xx++){if(!O(xx,yy))continue;const f=(!O(xx,yy-1)||!O(xx-1,yy))?1.22:(!O(xx,yy+1)||!O(xx+1,yy))?0.74:1;if(f!==1){const i=(yy*16+xx)*4;for(let c=0;c<3;c++)d[i+c]=Math.min(255,d[i+c]*f+(f>1?10:0));}}
     for(let yy=0;yy<16;yy++)for(let xx=0;xx<16;xx++){if(o[yy*16+xx])continue;if((xx>0&&o[yy*16+xx-1])||(xx<15&&o[yy*16+xx+1])||(yy>0&&o[yy*16+xx-16])||(yy<15&&o[yy*16+xx+16]))set(xx,yy,0x1c1410,230);}
     tx.putImageData(img,0,0);x.drawImage(t,0,0,32,32);}
   x.setTransform(1,0,0,1,0,0);return iconCache[id]=c;}
@@ -269,7 +330,8 @@ const RECIPES=[];
 function rec(pat,key,out,n){RECIPES.push({pat,key,out:[out,n||1]});}
 rec(['L'],{L:LOGS},9,4);rec(['P','P'],{P:9},256,4);rec(['PP','PP'],{P:9},20);rec(['CCC','C C','CCC'],{C:4},21);
 rec(['c','s'],{c:257,s:256},22,4);rec(['SS','SS'],{S:5},17);rec(['SS','SS'],{S:3},29,4);rec(['SS','SS'],{S:272},36);rec(['EE','EE'],{E:274},39);
-[[24,50],[25,51],[38,52],[27,53],[257,54]].forEach(p=>{rec(['WD'],{W:36,D:p[0]},p[1]);rec(['W','D'],{W:36,D:p[0]},p[1]);});
+rec(['L'],{L:83},85,4);rec(['P','P'],{P:85},256,4);rec(['PP','PP'],{P:85},20);rec(['II','II'],{I:89},92,4);rec(['GG','GG'],{G:90},39);rec(['SS','SS'],{S:88},85,2);
+[[24,50],[91,50],[25,51],[38,52],[27,53],[257,54]].forEach(p=>{rec(['WD'],{W:36,D:p[0]},p[1]);rec(['W','D'],{W:36,D:p[0]},p[1]);});
 rec(['PPP','LLL','PPP'],{P:9,L:[275,256]},55);rec(['CD','DC'],{C:4,D:2},56,4);rec(['WWW','PPP'],{W:[36,50,51,52,53,54],P:9},45);
 [[275,287],[258,288],[260,289]].forEach(p=>rec(['A A','AAA','AAA'],{A:p[0]},p[1]));rec(['s s','sss','s s'],{s:256},76,3);rec(['PP','PP','PP'],{P:9},74);[[9,79],[4,80],[56,81]].forEach(p=>rec(['S  ','SS ','SSS'],{S:p[0]},p[1],4));rec(['MMM','SES','WWW'],{M:355,S:352,E:356,W:282},357);rec(['  s',' sS','s S'],{s:256,S:272},354);rec(['PsP','PsP'],{P:9,s:256},82,3);rec(['P P','PPP'],{P:9},353);rec([' I','I '],{I:258},350);rec(['RRR'],{R:78},351,3);rec(['R'],{R:78},352);rec(['PPP','LLL','PPP'],{P:9,L:351},55);rec(['WWW'],{W:282},283);rec(['MM',' s',' s'],{M:[9,4,258],s:256},284);
 rec(['SSS'],{S:3},48,6);rec(['SSS'],{S:9},49,6);rec([' sS','s S',' sS'],{s:256,S:272},280);rec(['c','s','f'],{c:4,s:256,f:273},279,4);rec(['ESE','SES','ESE'],{E:274,S:5},46);rec(['PPP','P P','PPP'],{P:9},40);rec(['I I',' I '],{I:258},276);rec(['WWW','PPP'],{W:36,P:9},45);rec(['CC','CC'],{C:4},44,4);
@@ -282,4 +344,4 @@ function matchRecipe(grid,w){let x0=w,y0=w,x1=-1,y1=-1;for(let y=0;y<w;y++)for(l
         if(!want){if(s){ok=false;break;}}else if(!s||(Array.isArray(want)?!want.includes(s.id):want!==s.id)){ok=false;break;}}
       if(ok)return{id:rc.out[0],n:rc.out[1]};}}
   return null;}
-const CREATIVE_ITEMS=[1,2,3,4,29,5,17,18,7,30,32,9,8,31,33,19,20,21,40,45,74,76,82,79,80,81,48,49,56,55,57,58,59,61,62,63,64,65,66,67,68,50,51,52,53,54,46,47,22,39,41,42,43,44,11,12,13,14,15,16,28,35,36,27,24,25,38,26,37,10,6,23,256,257,258,259,260,269,262,264,266,268,271,272,273,274,275,276,277,278,280,279,287,288,289,353,354,355,356,357,350,351,352,78,77,284,281,282,283,285,286,69].concat(Array.from({length:20},(_,i)=>300+i)).concat(EGGS.map((_,i)=>330+i));
+const CREATIVE_ITEMS=[1,2,3,4,29,5,17,18,7,30,32,83,9,85,8,31,33,84,86,87,88,89,92,90,91,19,20,21,40,45,74,76,82,79,80,81,48,49,56,55,57,58,59,61,62,63,64,65,66,67,68,50,51,52,53,54,46,47,22,39,41,42,43,44,11,12,13,14,15,16,28,35,36,27,24,25,38,26,37,10,6,23,256,257,258,259,260,269,262,264,266,268,271,272,273,274,275,276,277,278,280,279,287,288,289,353,354,355,356,357,350,351,352,78,77,284,281,282,283,285,286,69].concat(Array.from({length:20},(_,i)=>300+i)).concat(EGGS.map((_,i)=>330+i));

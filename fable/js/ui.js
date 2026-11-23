@@ -45,19 +45,32 @@ function openGui(type,key){gui.open=true;gui.type=type;gui.cw=type==='table'?3:2
   else if(type==='chest'){if(!W.tiles[key]){const tl=W.tiles[key]={c:1,s:new Array(27).fill(null)};const p=key.split(',').map(Number),md=W.mods.get(ckey(p[0]>>4,p[2]>>4)),idx=(p[1]<<8)|((p[2]&15)<<4)|(p[0]&15);
       if(!(md&&md.has(idx))){const L=[[283,3],[281,6],[258,3],[279,8],[269,3],[47,2],[257,6],[22,6],[259,1],[276,1],[280,1],[260,1],[282,5]],r=rng32(hashStr(key)^W.seed),n=3+((r()*4)|0);for(let i=0;i<n;i++){const l=L[(r()*L.length)|0];tl.s[(r()*27)|0]={id:l[0],n:1+((r()*l[1])|0)};}}}
     gui.chest=W.tiles[key];t='<div class="slots">';for(let i=0;i<27;i++)t+=slotDiv('chest',i);t+='</div>';$('guiTitle').textContent='Chest';}
+  else if(type==='trade'){t='<div id="tlist">';TRADES.forEach((tr,i)=>{t+='<div class="trow" data-t="'+i+'" title="Give '+tr[0][1]+' x '+IT[tr[0][0]].name+', get '+tr[1][1]+' x '+IT[tr[1][0]].name+'"><div class="tslot">'+stackHTML({id:tr[0][0],n:tr[0][1]})+'</div><div class="tarr">&#10140;</div><div class="tslot">'+stackHTML({id:tr[1][0],n:tr[1][1]})+'</div></div>';});t+='</div>';$('guiTitle').textContent='Settler Trades - click an offer to trade';}
   else{t='<div id="cregrid">';for(let i=0;i<CREATIVE_ITEMS.length;i++)t+=slotDiv('cre',i);t+='</div>';$('guiTitle').textContent='Creative Inventory - every block and item';}
   $('guiTop').innerHTML=t;let m='';for(let i=9;i<36;i++)m+=slotDiv('inv',i);$('guiMain').innerHTML=m;m='';for(let i=0;i<9;i++)m+=slotDiv('inv',i);$('guiHot').innerHTML=m;
   if(type==='inv'){const x=$('pcv').getContext('2d');const R=(c,a,b,w,h)=>{x.fillStyle=c;x.fillRect(a,b,w,h);};R('#e0ac7e',8,1,8,8);R('#26262e',8,0,8,3);R('#26262e',8,3,1,2);R('#26262e',15,3,1,2);R('#d9862b',8,3,8,1);R('#fff',9,5,2,1);R('#fff',13,5,2,1);R('#4a2a7a',10,5,1,1);R('#4a2a7a',13,5,1,1);R('#a8523a',11,7,2,1);
     R('#d9862b',8,9,8,12);R('#cc7a22',4,9,4,12);R('#cc7a22',16,9,4,12);R('#e0ac7e',4,18,4,3);R('#e0ac7e',16,18,4,3);R('#2c3a5a',8,21,4,12);R('#263350',12,21,4,12);}
   show('gui');refreshGui();if(document.pointerLockElement)document.exitPointerLock();}
 function closeGui(){if(!gui.open)return;const back=s=>{if(s&&!addItemRange(s,0,36))spawnDrop(P.x,P.y+1.3,P.z,s,-Math.sin(P.yaw)*4,2,-Math.cos(P.yaw)*4,1.5);};
-  for(let i=0;i<9;i++){back(gui.craft[i]);gui.craft[i]=null;}back(gui.cursor);gui.cursor=null;gui.open=false;show(null);refreshHUD();lockPointer();}
+  for(let i=0;i<9;i++){back(gui.craft[i]);gui.craft[i]=null;}back(gui.cursor);gui.cursor=null;gui.open=false;gui.trader=null;show(null);refreshHUD();lockPointer();}
+// ---------- settler trades: [[give id, n], [get id, n]] ----------
+const TRADES=[[[257,2],[22,8]],[[258,1],[279,8]],[[259,1],[262,4]],[[4,16],[258,1]],[[282,10],[258,1]],[[270,5],[283,1]],[[259,3],[260,1]],[[260,1],[42,1]],[[258,6],[288,1]]];
+const GREET=['Good day, traveler! Have a look at my wares.','Fresh goods, fair prices.','Mind the Emberlings after dark.','They say obsidian gates lead somewhere... warm.','Rimewalkers roam the Frost Spires. Bring a sword.'];
+function countItem(id){let n=0;for(const s of P.inv)if(s&&s.id===id)n+=s.n;return n;}
+function takeItem(id,n){for(let i=35;i>=0&&n>0;i--){const s=P.inv[i];if(s&&s.id===id){const k=Math.min(n,s.n);s.n-=k;n-=k;if(s.n<=0)P.inv[i]=null;}}}
+function openTrade(m){if(!m||m.dead)return;m.yaw=Math.atan2(P.x-m.x,P.z-m.z);m.moving=false;m.aiT=4;sfx.mob('settler',m.x,m.y,m.z);for(const k in input)input[k]=false;openGui('trade');gui.trader=m;toast('Settler: '+GREET[(Math.random()*GREET.length)|0]);}
+function doTrade(i){const tr=TRADES[i];if(!tr||!gui.open||gui.type!=='trade')return;const m=gui.trader;
+  if(countItem(tr[0][0])<tr[0][1]){sfx.click();toast('Settler: You need '+tr[0][1]+' x '+IT[tr[0][0]].name+' for that.');return;}
+  takeItem(tr[0][0],tr[0][1]);const out={id:tr[1][0],n:tr[1][1]};if(!addItemRange(out,0,36))spawnDrop(P.x,P.y+1.3,P.z,out,0,2,0,0.5);sfx.pop();
+  if(m&&!m.dead){m.moving=false;m.aiT=4;sfx.mob('settler',m.x,m.y,m.z);puff(m.x,m.y+2.25,m.z,0x5ad85a,10,0.5,1.5,-1,0.9);}
+  adv('trade');toast('Settler: A fair trade! Here, '+tr[1][1]+' x '+IT[tr[1][0]].name+'.');refreshGui();refreshHUD();}
 function slotArr(k){return k==='inv'?P.inv:k==='arm'?P.arm:k==='craft'?gui.craft:k==='chest'?gui.chest.s:gui.furn.s;}
 function addToArr(arr,s){const mx=IT[s.id].stack;if(mx>1)for(let i=0;i<arr.length&&s.n>0;i++){const t=arr[i];if(t&&t.id===s.id&&t.n<mx){const k=Math.min(mx-t.n,s.n);t.n+=k;s.n-=k;}}for(let i=0;i<arr.length&&s.n>0;i++)if(!arr[i]){arr[i]={id:s.id,n:s.n};if(s.d)arr[i].d=s.d;s.n=0;}return s.n<=0;}
 function craftGrid(){if(gui.cw===3)return gui.craft;return gui.craft.slice(0,4);}
 function refreshGui(){if(!gui.open)return;document.querySelectorAll('#gui .slot').forEach(e=>{const k=e.dataset.k,i=+e.dataset.i;let s;
     if(k==='res'){s=matchRecipe(craftGrid(),gui.cw);}else if(k==='cre'){s={id:CREATIVE_ITEMS[i],n:1};}else s=slotArr(k)[i];const h=stackHTML(s);if(e._h!==h){e.innerHTML=h;e._h=h;}});
   const c=$('cursor');if(gui.cursor){c.style.display='block';c.innerHTML=stackHTML(gui.cursor);}else c.style.display='none';
+  if(gui.type==='trade')document.querySelectorAll('#gui .trow').forEach(e=>{const tr=TRADES[+e.dataset.t];e.classList.toggle('no',countItem(tr[0][0])<tr[0][1]);});
   if(gui.type==='furnace'){const f=gui.furn;$('fflame').style.height=(f.burn>0?f.burn/f.burnMax*100:0)+'%';$('fprog').style.width=(f.cook/10*100)+'%';}}
 function slotClick(k,i,btn,shift){sfx.click();let c=gui.cursor;
   if(k==='cre'){const id=CREATIVE_ITEMS[i],mx=IT[id].stack;if(shift)addItemRange({id,n:mx},0,36);else if(c&&c.id===id&&btn===0&&c.n<mx)c.n++;else if(c)gui.cursor=null;else gui.cursor={id,n:btn===2?1:mx};}
@@ -106,7 +119,8 @@ function initUI(){
   $('pquit').onclick=()=>{sfx.click();quitToTitle();};
   $('respawn').onclick=()=>{sfx.click();respawn();};
   $('dquit').onclick=()=>{sfx.click();respawn(true);quitToTitle();};
-  const g=$('gui');g.addEventListener('mousedown',e=>{const s=e.target.closest('.slot');e.preventDefault();if(s)slotClick(s.dataset.k,+s.dataset.i,e.button,e.shiftKey);
+  $('tradebtn').addEventListener('click',e=>{e.preventDefault();e.stopPropagation();sfx.init();if(G.state==='play'&&!G.paused&&!P.dead&&!gui.open&&G.nearSettler)openTrade(G.nearSettler);});
+  const g=$('gui');g.addEventListener('mousedown',e=>{const tw=e.target.closest('.trow');if(tw){e.preventDefault();if(!gui.cursor)doTrade(+tw.dataset.t);return;}const s=e.target.closest('.slot');e.preventDefault();if(s)slotClick(s.dataset.k,+s.dataset.i,e.button,e.shiftKey);
     else if(!e.target.closest('.panel')&&gui.cursor){spawnDrop(P.x,P.y+1.3,P.z,gui.cursor,-Math.sin(P.yaw)*5,2,-Math.cos(P.yaw)*5,1.5);gui.cursor=null;refreshGui();}});
   g.addEventListener('contextmenu',e=>e.preventDefault());
   window.addEventListener('mousemove',e=>{if(!gui.open)return;const c=$('cursor');c.style.left=e.clientX+'px';c.style.top=e.clientY+'px';const s=e.target.closest&&e.target.closest('.slot');const tip=$('tip');let st=null;

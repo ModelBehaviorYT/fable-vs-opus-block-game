@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8"><title>Loamlands</title>
 <meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="icon" href="data:,">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/vt323@5.0.8/index.css">
 <style>
 *{box-sizing:border-box;user-select:none}
@@ -71,13 +72,20 @@ img,.px{image-rendering:pixelated}
 #died h2{font-size:72px;color:#ff5a4a;text-shadow:4px 4px 0 #3a0a06}
 #deathmsg{font-size:28px;margin-bottom:20px;text-shadow:2px 2px 0 #000}
 #loadbar{width:400px;height:14px;border:3px solid #0d1116;background:#12161b}#loadbar i{display:block;height:100%;width:0;background:#8ec76a}
+#tradebtn{position:absolute;left:50%;bottom:170px;transform:translateX(-50%);display:none;pointer-events:auto;cursor:pointer;font-size:26px;padding:4px 22px;color:#f3f0e2;border:3px solid #0d1116;background:linear-gradient(#6f8a5a,#58724a);box-shadow:inset 3px 3px 0 #94ad7c,inset -3px -3px 0 #3e5334;text-shadow:2px 2px 0 #2a331f;white-space:nowrap}
+#tradebtn:hover{background:linear-gradient(#86a56c,#6a8a58);outline:2px solid #f4f1e4}
+#tlist{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;width:432px}
+.trow{display:flex;align-items:center;justify-content:center;gap:2px;padding:3px;background:#2f3944;border:2px solid #3a4550;cursor:pointer}
+.trow:hover{border-color:#f4f1e4;background:#3a4652}.trow.no{opacity:.42;filter:grayscale(1);cursor:default}.trow.no:hover{border-color:#3a4550;background:#2f3944}
+.tslot{width:44px;height:44px;background:#3b4551;border:2px solid #1b2128;border-right-color:#5a6775;border-bottom-color:#5a6775;position:relative}
+.tslot .ic{width:32px;height:32px;margin:-16px}.tarr{font-size:26px;color:#93a1ae;width:26px;text-align:center}
 ::-webkit-scrollbar{width:12px}::-webkit-scrollbar-track{background:#12161b}::-webkit-scrollbar-thumb{background:#5d6b78;border:2px solid #12161b}
 </style></head><body>
 <canvas id="c"></canvas>
 <div id="hud">
   <div id="riftov" style="position:absolute;inset:0;background:radial-gradient(#2ee0b8cc,#0c6a70ee);opacity:0"></div><div id="water"></div><div id="lavaov"></div><div id="vig"></div>
   <div id="cross"></div><div id="debug"></div><div id="hint">Click to capture the mouse</div>
-  <div id="itemname"></div><div id="toast"></div>
+  <div id="itemname"></div><div id="toast"></div><div id="tradebtn" class="tc-tap">Trade (T)</div>
   <div id="bars"><div style="position:absolute;left:0;right:0;bottom:-10px;height:7px;background:#12161b;border:1px solid #05080b"><div id="xpfill" style="height:100%;width:0;background:linear-gradient(#b8ff5a,#5ac81e)"></div></div><div id="xplvl" style="position:absolute;left:0;right:0;bottom:-6px;text-align:center;font-size:24px;color:#a8ff4a;text-shadow:2px 2px 0 #10200a,-1px -1px 0 #10200a"></div>
     <div id="armor" style="position:absolute;display:flex;gap:1px;left:0;bottom:22px"></div><div id="hearts"></div><div id="food"></div><div id="air"></div></div>
   <div id="hotbar"></div>
@@ -109,7 +117,7 @@ img,.px{image-rendering:pixelated}
   <div class="sl"><span id="o_vol_l"></span><input type="range" id="o_vol" min="0" max="100" step="1"></div>
   <button class="btn gray" id="odiff" style="width:520px">Difficulty: Normal</button>
   <button class="btn" id="odone" style="margin-top:14px">Done</button>
-  <div class="keys">WASD move &middot; Space jump (double-tap to fly in Creative) &middot; Shift sneak &middot; R, Ctrl or double-tap W sprint<br>Left-click break / attack &middot; Right-click place / use / eat &middot; Wheel or 1-9 hotbar &middot; E inventory &middot; Q drop &middot; F5 view &middot; F1 hide HUD &middot; F3 debug &middot; T or / commands (/help)</div>
+  <div class="keys">WASD move &middot; Space jump (double-tap to fly in Creative) &middot; Shift sneak &middot; R, Ctrl or double-tap W sprint<br>Left-click break / attack &middot; Right-click place / use / eat &middot; Wheel or 1-9 hotbar &middot; E inventory &middot; Q drop &middot; F5 view &middot; F1 hide HUD &middot; F3 debug &middot; T trade (near a Settler) or chat &middot; / commands (/help)</div>
 </div>
 <div id="quit" class="screen dim"><h2>Thanks for playing Loamlands!</h2><div style="margin-bottom:20px;color:#b9c6d2">Your worlds are saved in this browser. You can close this tab now.</div><button class="btn" data-go="title">Back to Title</button></div>
 <div id="pause" class="screen dim">
@@ -119,10 +127,10 @@ img,.px{image-rendering:pixelated}
   <button class="btn gray" data-go="recipes">Recipe Book</button>
   <button class="btn gray" id="pmode">Game Mode: Survival</button>
   <button class="btn gray" id="pquit">Save and Quit to Title</button>
-  <div class="keys" style="color:#ffe27a">Tips: trade with village settlers (iron, gold, coal, diamonds) &middot; hoe + seeds from tall grass grow wheat for bread<br>Build an obsidian frame and light it with Ember Dust to open a Rift Gate to the Emberdeep</div>
-  <div class="keys" style="margin-top:6px">WASD move &middot; Space jump (double-tap to fly in Creative) &middot; Shift sneak &middot; R, Ctrl or double-tap W sprint<br>Left-click break / attack &middot; Right-click place / use / eat &middot; Wheel or 1-9 hotbar &middot; E inventory &middot; Q drop &middot; F5 view &middot; F1 hide HUD &middot; F3 debug &middot; T or / commands (/help)</div>
+  <div class="keys" style="color:#ffe27a">Tips: walk up to a village Settler and press T (or tap Trade) to trade &middot; hoe + seeds from tall grass grow wheat for bread<br>Build an obsidian frame and light it with Ember Dust to open a Rift Gate to the Emberdeep</div>
+  <div class="keys" style="margin-top:6px">WASD move &middot; Space jump (double-tap to fly in Creative) &middot; Shift sneak &middot; R, Ctrl or double-tap W sprint<br>Left-click break / attack &middot; Right-click place / use / eat &middot; Wheel or 1-9 hotbar &middot; E inventory &middot; Q drop &middot; F5 view &middot; F1 hide HUD &middot; F3 debug &middot; T trade (near a Settler) or chat &middot; / commands (/help)</div>
 </div>
-<div id="recipes" class="screen dim"><h2>Recipe Book</h2><div id="rlist" style="width:1040px;height:400px;overflow-y:auto;background:#12161b;border:3px solid #0d1116;padding:8px;display:grid;grid-template-columns:repeat(4,1fr);gap:6px;pointer-events:auto"></div><div style="color:#b9c6d2;font-size:20px">Furnace: ores, sand, cobblestone, logs, raw meat and fish can be smelted with coal, wood or a lava bucket.<br>Settler trades (right-click while holding): iron &rarr; arrows &middot; gold &rarr; steak &middot; diamond &rarr; gold block &middot; coal &rarr; torches &middot; cobblestone &rarr; iron<br>Animals follow wheat, seeds or apples; feed one wheat or seeds to raise a baby. Put armor in the Armor slot of your inventory.<br>Right-click a Bookshelf holding a tool to enchant it (3 levels). Place a Boat on water and right-click it to sail. Shears give wool.<br>Fishing Rod: right-click to cast into water, right-click again on a bite. Feed a wolf bones to tame it. T or / opens commands.</div><button class="btn" data-go="pause">Back</button></div>
+<div id="recipes" class="screen dim"><h2>Recipe Book</h2><div id="rlist" style="width:1040px;height:400px;overflow-y:auto;background:#12161b;border:3px solid #0d1116;padding:8px;display:grid;grid-template-columns:repeat(4,1fr);gap:6px;pointer-events:auto"></div><div style="color:#b9c6d2;font-size:20px">Furnace: ores, sand, cobblestone, logs, raw meat and fish can be smelted with coal, wood or a lava bucket.<br>Settler trades: stand near a Settler and press T, tap Trade or right-click them: coal, iron, gold, diamonds, cobblestone, wheat and rotten flesh buy torches, arrows, food, gems and armor<br>Animals follow wheat, seeds or apples; feed one wheat or seeds to raise a baby. Put armor in the Armor slot of your inventory.<br>Right-click a Bookshelf holding a tool to enchant it (3 levels). Place a Boat on water and right-click it to sail. Shears give wool.<br>Fishing Rod: right-click to cast into water, right-click again on a bite. Feed a wolf bones to tame it. / opens commands.</div><button class="btn" data-go="pause">Back</button></div>
 <div id="died" class="screen" style="background:rgba(120,10,10,.5)"><h2>You Died!</h2><div id="deathmsg"></div><button class="btn" id="respawn">Respawn</button><button class="btn gray" id="dquit">Title Screen</button></div>
 <div id="loading" class="screen" style="background:#161c16"><h2 id="loadtxt">Building terrain...</h2><div id="loadbar"><i></i></div></div>
 <div id="gui" class="screen dim"><div class="panel"><div class="gt" id="guiTitle"></div><div id="guiTop"></div><div class="gt">Inventory</div><div class="slots" id="guiMain"></div><div style="height:10px"></div><div class="slots" id="guiHot"></div></div></div>

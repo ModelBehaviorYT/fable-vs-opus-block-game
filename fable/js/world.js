@@ -18,10 +18,10 @@ function makeNoise(seed){const p=new Uint8Array(512),r=rng32(seed);const a=new U
 
 // ================= WORLD =================
 const SEA=50,WH=128;
-const BIO={OCEAN:0,RIVER:1,BEACH:2,PLAINS:3,FOREST:4,DESERT:5,SNOWY:6,MOUNT:7,REDLANDS:8,SWAMP:9,TAIGA:10};
-const BIONAME=['Ocean','River','Beach','Plains','Forest','Desert','Snowy Tundra','Mountains','Redlands','Swamp','Taiga'];
+const BIO={OCEAN:0,RIVER:1,BEACH:2,PLAINS:3,FOREST:4,DESERT:5,SNOWY:6,MOUNT:7,REDLANDS:8,SWAMP:9,TAIGA:10,BLOSSOM:11,SPORE:12,SPIRES:13};
+const BIONAME=['Ocean','River','Beach','Plains','Forest','Desert','Snowy Tundra','Mountains','Redlands','Swamp','Taiga','Blossom Grove','Sporelands','Frost Spires'];
 const W={seed:0,noise:null,chunks:new Map(),mods:new Map(),tiles:{},ticks:new Map(),tickN:0};
-let CI_h=0,CI_b=0;
+let CI_h=0,CI_b=0,CI_b0=0;
 function colInfo(x,z){const N=W.noise;
   const cont=N.fbm(x/380,z/380,4)*1.9+0.08,mnt=N.fbm(x/240+300,z/240-200,3)*1.9;
   const temp=N.fbm(x/480-90,z/480+40,2)*2.0,moist=N.fbm(x/400+700,z/400+900,2)*2.0,det=N.fbm(x/48,z/48,3);
@@ -36,6 +36,9 @@ function colInfo(x,z){const N=W.noise;
   if((b===BIO.PLAINS||b===BIO.FOREST)&&moist>0.4&&temp>-0.1&&h<SEA+13){const f=Math.min(1,(moist-0.4)/0.1)*Math.min(1,(SEA+13-h)/6)*Math.min(1,(temp+0.1)/0.1);const tg=SEA+(det>0.03?1:det>-0.1?0:-1);h=Math.round(h+(tg-h)*f);if(f>0.7)b=9;}
   if((b===BIO.PLAINS||b===BIO.FOREST)&&temp<-0.1)b=10;
   if(b===8){const q=N.fbm(x/60+40,z/60,2)*1.9;h+=q>0.2?17:q>-0.05?8:0;}
+  CI_b0=b;// newer biomes only re-skin the surface (same heights), so old saves and villages stay where they were
+  if(b===BIO.PLAINS||b===BIO.FOREST){if(N.fbm(x/300-2100,z/300+1300,2)*2>0.4)b=12;else if(N.fbm(x/260+1500,z/260-800,2)*2>0.36&&temp>-0.05)b=11;}
+  else if(b===BIO.SNOWY&&h>SEA+1&&N.fbm(x/220-1500,z/220+600,2)*2>0.22)b=13;
   CI_h=h;CI_b=b;return h;}
 function isCave(x,y,z,h){if(y<2||y>h)return false;if(h<=SEA+2&&y>h-8)return false;const N=W.noise;
   const a=N.n3(x/36,y/22,z/36),b=N.n3(x/36+71.3,y/22+13.7,z/36-40.1);if(a*a+b*b<0.0075)return true;
@@ -45,7 +48,7 @@ function getChunk(cx,cz){return W.chunks.get(ckey(cx,cz));}
 const VR=128,VH=[[-11,-9],[10,-10],[-12,9],[11,10],[0,-19],[1,18],[-22,0],[22,1]];
 function villageAt(rx,rz){const N=W.noise;if(!N.vc)N.vc=new Map();const k=rx+','+rz;if(N.vc.has(k))return N.vc.get(k);let v=null;
   if(hash2(rx,rz,W.seed+91)<0.6){for(let t=0;t<4&&!v;t++){const x=rx*VR+30+((hash2(rx+t*7,rz,W.seed+92)*(VR-60))|0),z=rz*VR+30+((hash2(rx,rz+t*7,W.seed+93)*(VR-60))|0);const h=colInfo(x,z);
-      if((CI_b===BIO.PLAINS||CI_b===BIO.DESERT||CI_b===BIO.SNOWY)&&h>SEA+1&&h<SEA+20)v={x,z,h,b:CI_b};}}
+      if((CI_b0===BIO.PLAINS||CI_b===BIO.DESERT||CI_b===BIO.SNOWY)&&h>SEA+1&&h<SEA+20)v={x,z,h,b:CI_b0};}}
   N.vc.set(k,v);return v;}
 function nearestVillage(x,z){let best=null,bd=1e9;const rx=Math.floor(x/VR),rz=Math.floor(z/VR);for(let dz=-2;dz<=2;dz++)for(let dx=-2;dx<=2;dx++){const v=villageAt(rx+dx,rz+dz);if(v){const d=Math.hypot(v.x-x,v.z-z);if(d<bd){bd=d;best=v;}}}return best;}
 function genUnder(cx,cz){const b=new Uint8Array(32768),m=new Uint8Array(32768);const c={cx,cz,b,m,maxY:0,mesh:null,meshT:null,dirty:true,urgent:false};const N=W.noise,x0=cx*16,z0=cz*16,seed=W.seed+777;
@@ -80,12 +83,16 @@ function genChunk(cx,cz){if(W.dim===1)return genUnder(cx,cz);
         else if(bio===8){if(d<1)id=B.REDSAND;else if(d<28)id=[62,63,64,62,65,62,64,63][y&7];}
         else if(bio===BIO.MOUNT){if(h>SEA+46+dn*6){if(d<2)id=B.SNOW;}else if(dn>0.05&&h<SEA+44){if(d===0)id=B.GRASS;else if(d<3)id=B.DIRT;}else if(dn<-0.3&&d<2)id=B.GRAVEL;}
         else if(bio===BIO.SNOWY){if(d===0)id=B.SNOWGRASS;else if(d<4)id=B.DIRT;}
+        else if(bio===12){if(d===0)id=B.SPORE;else if(d<4)id=B.DIRT;}
+        else if(bio===13){if(d<2)id=d===0&&dn>0.28?B.GICE:B.SNOW;else if(d<5)id=B.DIRT;}
         else{if(d===0)id=B.GRASS;else if(d<4)id=B.DIRT;}}
       b[(y<<8)|ci]=id;}
     for(let y=h+1;y<=SEA;y++)b[(y<<8)|ci]=(y===SEA&&N.fbm(wx/480-90,wz/480+40,2)*2.0<-0.3)?B.ICE:B.WATER;
     // plants
     const top=b[(h<<8)|ci];if(h>=SEA&&h<120){const r=hash2(wx,wz,seed+11);const ai=((h+1)<<8)|ci;
-      if(top===B.GRASS){const fl=N.n2(wx/20+50,wz/20);if(r<(bio===BIO.PLAINS?0.1:0.06))b[ai]=B.TALLGRASS;else if(r<0.2+(fl>0.25?0.08:0)&&r>0.19)b[ai]=fl>0.4?B.FLOWER_B:(hash2(wx,wz,seed+5)<0.5?B.FLOWER_R:B.FLOWER_Y);}
+      if(top===B.GRASS&&bio===11){if(r<0.13)b[ai]=B.PETALS;else if(r<0.21)b[ai]=B.TALLGRASS;else if(r<0.23)b[ai]=B.FLOWER_R;}
+      else if(top===B.SPORE){if(r<0.045)b[ai]=B.GLOWCAP;else if(r<0.09)b[ai]=r<0.07?67:68;}
+      else if(top===B.GRASS){const fl=N.n2(wx/20+50,wz/20);if(r<(bio===BIO.PLAINS?0.1:0.06))b[ai]=B.TALLGRASS;else if(r<0.2+(fl>0.25?0.08:0)&&r>0.19)b[ai]=fl>0.4?B.FLOWER_B:(hash2(wx,wz,seed+5)<0.5?B.FLOWER_R:B.FLOWER_Y);}
       else if(top===B.SGRASS&&bio===10){if(r<0.14)b[ai]=B.TALLGRASS;else if(r<0.17)b[ai]=68;else if(r<0.19)b[ai]=B.DEADBUSH;}
       else if(top===B.SGRASS){if(r<0.2)b[ai]=B.TALLGRASS;else if(r<0.25)b[ai]=r<0.225?67:68;}
       else if((top===B.SAND||top===B.REDSAND)&&(bio===BIO.DESERT||bio===8)&&r<0.008)b[ai]=B.DEADBUSH;}
@@ -100,8 +107,14 @@ function genChunk(cx,cz){if(W.dim===1)return genUnder(cx,cz);
   for(let gz=Math.floor((z0-3)/CS);gz<=Math.floor((z0+18)/CS);gz++)for(let gx=Math.floor((x0-3)/CS);gx<=Math.floor((x0+18)/CS);gx++){
     const tx=gx*CS+((hash2(gx,gz,seed+1)*CS)|0),tz=gz*CS+((hash2(gx,gz,seed+2)*CS)|0);const pr=hash2(gx,gz,seed+3);
     const h=colInfo(tx,tz),bio=CI_b;if(h<SEA)continue;
-    const dens=bio===BIO.FOREST?0.5:bio===BIO.PLAINS?0.035:bio===BIO.SNOWY?0.1:bio===BIO.DESERT?0.05:bio===8?0.035:bio===9?0.24:bio===10?0.34:bio===BIO.MOUNT?(h<SEA+44?0.06:0):0;
+    const dens=bio===BIO.FOREST?0.5:bio===BIO.PLAINS?0.035:bio===BIO.SNOWY?0.1:bio===BIO.DESERT?0.05:bio===8?0.035:bio===9?0.24:bio===10?0.34:bio===BIO.MOUNT?(h<SEA+44?0.06:0):bio===11?0.11:bio===12?0.1:bio===13?0.16:0;
     if(pr>=dens||isCave(tx,h,tz,h))continue;const r2=hash2(gx,gz,seed+4);
+    if(bio===13){const th=5+((r2*r2*18)|0),R=th>12?2.3:th>8?1.6:1.1;for(let i=-1;i<=th;i++){const rr=R*(1-Math.max(0,i)/(th+1));for(let dz=-2;dz<=2;dz++)for(let dx=-2;dx<=2;dx++)if(dx*dx+dz*dz<=rr*rr+0.3||(!dx&&!dz))put(tx+dx,h+i,tz+dz,B.GICE);}continue;}
+    if(bio===12){const th=4+((r2*3)|0),cr=r2<0.5?2:3;for(let i=1;i<=th;i++)put(tx,h+i,tz,B.STEM);for(let dz=-cr;dz<=cr;dz++)for(let dx=-cr;dx<=cr;dx++){const e=Math.max(Math.abs(dx),Math.abs(dz));if(e===cr&&Math.abs(dx)===Math.abs(dz))continue;put(tx+dx,h+th+1,tz+dz,B.CAP,1);if(e===cr)put(tx+dx,h+th,tz+dz,B.CAP,1);}
+      for(let dz=-1;dz<=1;dz++)for(let dx=-1;dx<=1;dx++)if(cr===3||Math.abs(dx)+Math.abs(dz)<2)put(tx+dx,h+th+2,tz+dz,B.CAP,1);continue;}
+    if(bio===11){const th=4+((hash2(gx,gz,seed+6)*3)|0),tp=h+th;for(let i=1;i<=th;i++)put(tx,h+i,tz,B.BLOSSOM_LOG);
+      for(let ly=tp-1;ly<=tp+2;ly++){const rad=ly===tp+2?1.5:ly===tp+1?2.6:3.3;for(let dz=-3;dz<=3;dz++)for(let dx=-3;dx<=3;dx++){const dd=dx*dx+dz*dz;if(dd>rad*rad||(dd>rad*rad-3&&hash2(tx+dx*7+ly,tz+dz*13,seed)<0.4))continue;put(tx+dx,ly,tz+dz,B.BLOSSOM_LEAVES,1);}}
+      for(let k=0;k<7;k++){const a=k*0.9+r2*6,dx=Math.round(Math.cos(a)*3),dz=Math.round(Math.sin(a)*3);if(hash2(tx+k,tz,seed+9)<0.55)put(tx+dx,tp-2,tz+dz,B.BLOSSOM_LEAVES,1);}continue;}
     if(bio===BIO.DESERT||bio===8){const ch=1+((r2*3)|0);for(let i=1;i<=ch;i++)put(tx,h+i,tz,B.CACTUS);continue;}
     if(bio===BIO.MOUNT&&N.n2(tx/9,tz/9)<=0.05)continue;
     if(bio===BIO.SNOWY||bio===10||(bio===BIO.MOUNT&&r2<0.5)){const th=6+((r2*4)|0);for(let i=1;i<=th;i++)put(tx,h+i,tz,B.SPRUCE_LOG);
@@ -123,7 +136,7 @@ function genChunk(cx,cz){if(W.dim===1)return genUnder(cx,cz);
     const wall=v.b===BIO.DESERT?B.SANDSTONE:B.PLANKS,post=v.b===BIO.DESERT?B.SANDSTONE:B.LOG;
     VH.forEach((o,hi)=>{if(hash2(v.x+hi,v.z,seed+95)>0.85)return;const hx=v.x+o[0],hz=v.z+o[1];
       // path
-      for(let t=0;t<=1;t+=0.04){const px=Math.round(v.x+o[0]*t),pz=Math.round(v.z+o[1]*t);if(px<x0-1||px>x0+16||pz<z0-1||pz>z0+16)continue;const ph=colInfo(px,pz);for(let d=0;d<2;d++){const lx=px+d-x0,lz=pz-z0;if(lx<0||lx>15||lz<0||lz>15)continue;const i=(ph<<8)|(lz<<4)|lx;if(b[i]===B.GRASS||b[i]===B.SAND||b[i]===B.SNOWGRASS){b[i]=B.GRAVEL;if(SHAPE[b[i+256]]===2)b[i+256]=0;}}}
+      for(let t=0;t<=1;t+=0.04){const px=Math.round(v.x+o[0]*t),pz=Math.round(v.z+o[1]*t);if(px<x0-1||px>x0+16||pz<z0-1||pz>z0+16)continue;const ph=colInfo(px,pz);for(let d=0;d<2;d++){const lx=px+d-x0,lz=pz-z0;if(lx<0||lx>15||lz<0||lz>15)continue;const i=(ph<<8)|(lz<<4)|lx;if(b[i]===B.GRASS||b[i]===B.SAND||b[i]===B.SNOWGRASS||b[i]===B.SPORE||b[i]===B.SNOW||b[i]===B.GICE){b[i]=B.GRAVEL;if(SHAPE[b[i+256]]===2)b[i+256]=0;}}}
       if(hx<x0-5||hx>x0+20||hz<z0-5||hz>z0+20)return;const gh=colInfo(hx,hz);if(gh<SEA+1)return;const dxs=Math.abs(o[0])>Math.abs(o[1]);
       for(let dz=-3;dz<=3;dz++)for(let dx=-3;dx<=3;dx++){const ax=Math.abs(dx),az=Math.abs(dz),e=Math.max(ax,az);
         if(e<=2){for(let d=1;d<=5;d++)put(hx+dx,gh-d,hz+dz,B.COBBLE);put(hx+dx,gh,hz+dz,e===2?B.COBBLE:B.PLANKS);
@@ -211,18 +224,18 @@ function computeLight(){const tot=RA*(YT+1);SL.fill(0,0,tot+RA);BLG.fill(0,0,tot
 function tileUV(t){return[(t%16)/16+0.0006,1-(((t/16)|0)+1)/16+0.0006];}
 const TUV=[];for(let i=0;i<256;i++)TUV.push(tileUV(i));const TU=1/16-0.0012;
 function buildChunkMesh(c){fillRegion(c);computeLight();const O=BO,T=BT;O.nv=O.ni=T.nv=T.ni=0;const my=Math.min(c.maxY,126);
-  const lv=[0,0,0,0],sv=[0,0,0,0],av=[0,0,0,0];
+  const lv=[0,0,0,0],sv=[0,0,0,0],av=[0,0,0,0];const SN=k=>(((k/RA)|0)>=colTop[k%RA]?1:0.8);// cells with no open sky above get dimmer skylight: soft shade under trees and overhangs
   for(let y=1;y<=my;y++)for(let z=0;z<16;z++)for(let x=0;x<16;x++){const i=(y*RW+z+MG)*RW+x+MG;const id=RB[i];if(!id)continue;const shp=SHAPE[id],def=BL[id];
-    if(shp===1){for(let f=0;f<6;f++){const j=i+FOFF[f];const nid=RB[j];if(OPAQUE[nid]&&!(f===2&&def.h))continue;if(nid===id&&!def.leaf&&!(def.h&&(f===2||f===3)))continue;
+    if(shp===1){let vr=1;if(def.leaf||id===1||id===86||id===66){const hv=(Math.imul((c.cx*16+x)*73856093^y*19349663^(c.cz*16+z)*83492791,1597334677)>>>0)%1000/1000;const pn=W.noise.n2((c.cx*16+x)/13,(c.cz*16+z)/13);vr=def.leaf?0.84+hv*0.18+pn*0.14:0.95+hv*0.06+pn*0.16;}for(let f=0;f<6;f++){const j=i+FOFF[f];const nid=RB[j];if(OPAQUE[nid]&&!(f===2&&def.h))continue;if(nid===id&&!def.leaf&&!(def.h&&(f===2||f===3)))continue;
         const t=f===2?def.tex[0]:f===3?def.tex[1]:(def.tex[3]!==undefined&&FACEDIR[RM[i]&3]===f?def.tex[3]:def.tex[2]);const uv=TUV[t],cs=FC[f],oo=AOO[f];
         for(let v=0;v<4;v++){const o1=oo[v][0],o2=oo[v][1];const oa=OPAQUE[RB[j+o1]],ob=OPAQUE[RB[j+o2]],od=OPAQUE[RB[j+o1+o2]];
-          let s=SL[j],bl=BLG[j],n=1;if(!oa){s+=SL[j+o1];bl+=BLG[j+o1];n++;}if(!ob){s+=SL[j+o2];bl+=BLG[j+o2];n++;}if(!od&&!(oa&&ob)){s+=SL[j+o1+o2];bl+=BLG[j+o1+o2];n++;}
+          let s=SL[j]*SN(j),bl=BLG[j],n=1;if(!oa){s+=SL[j+o1]*SN(j+o1);bl+=BLG[j+o1];n++;}if(!ob){s+=SL[j+o2]*SN(j+o2);bl+=BLG[j+o2];n++;}if(!od&&!(oa&&ob)){s+=SL[j+o1+o2]*SN(j+o1+o2);bl+=BLG[j+o1+o2];n++;}
           av[v]=(oa&&ob)?0:3-oa-ob-od;sv[v]=s/n/15;lv[v]=bl/n/15;}
         const hh=def.h||1,vh=f===2||f===3?1:hh;
-        const b0=O.nv;for(let v=0;v<4;v++){const k=O.nv++,cc=cs[v];O.p[k*3]=x+cc[0];O.p[k*3+1]=y+cc[1]*hh;O.p[k*3+2]=z+cc[2];O.u[k*2]=uv[0]+FUV[v][0]*TU;O.u[k*2+1]=uv[1]+FUV[v][1]*TU*vh;O.l[k*3]=sv[v];O.l[k*3+1]=lv[v];O.l[k*3+2]=FSH[f]*AOM[av[v]];}
+        const b0=O.nv;for(let v=0;v<4;v++){const k=O.nv++,cc=cs[v];O.p[k*3]=x+cc[0];O.p[k*3+1]=y+cc[1]*hh;O.p[k*3+2]=z+cc[2];O.u[k*2]=uv[0]+FUV[v][0]*TU;O.u[k*2+1]=uv[1]+FUV[v][1]*TU*vh;O.l[k*3]=sv[v];O.l[k*3+1]=lv[v];O.l[k*3+2]=FSH[f]*AOM[av[v]]*vr;}
         if(av[0]+av[2]<av[1]+av[3]){O.ix[O.ni++]=b0+1;O.ix[O.ni++]=b0+2;O.ix[O.ni++]=b0+3;O.ix[O.ni++]=b0+1;O.ix[O.ni++]=b0+3;O.ix[O.ni++]=b0;}
         else{O.ix[O.ni++]=b0;O.ix[O.ni++]=b0+1;O.ix[O.ni++]=b0+2;O.ix[O.ni++]=b0;O.ix[O.ni++]=b0+2;O.ix[O.ni++]=b0+3;}}}
-    else if(shp===2){const uv=TUV[def.tex[0]];const s=id===B.TORCH?1:SL[i]/15,bl=id===B.TORCH?1:BLG[i]/15;const a=id===B.TORCH?0:0.12;
+    else if(shp===2){const uv=TUV[def.tex[0]];const s=id===B.TORCH?1:SL[i]*SN(i)/15,bl=id===B.TORCH?1:BLG[i]/15;const a=id===B.TORCH?0:0.12;
       const Q=[[a,a,1-a,1-a],[1-a,1-a,a,a],[a,1-a,1-a,a],[1-a,a,a,1-a]];
       for(const q of Q){const b0=O.nv;for(let v=0;v<4;v++){const k=O.nv++;const fx=v===0||v===3?q[0]:q[2],fz=v===0||v===3?q[1]:q[3];O.p[k*3]=x+fx;O.p[k*3+1]=y+(v>1?1:0);O.p[k*3+2]=z+fz;O.u[k*2]=uv[0]+FUV[v][0]*TU;O.u[k*2+1]=uv[1]+FUV[v][1]*TU;O.l[k*3]=s;O.l[k*3+1]=bl;O.l[k*3+2]=1;}
         O.ix[O.ni++]=b0;O.ix[O.ni++]=b0+1;O.ix[O.ni++]=b0+2;O.ix[O.ni++]=b0;O.ix[O.ni++]=b0+2;O.ix[O.ni++]=b0+3;}}

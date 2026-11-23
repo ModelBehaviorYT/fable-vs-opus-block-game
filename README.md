@@ -14,10 +14,12 @@ Play page: https://modelbehavioryt.github.io/fable-vs-opus-block-game/
 ![Loamlands](screenshots/fable.png)
 ![Blockhaven](screenshots/opus.png)
 
-Controls: WASD to move, mouse to look, Space to jump, left click to break, right click to place.
+Controls: WASD to move, mouse to look, Space to jump, left click to break or hit, right click to place. Near a villager, press
+T (or the Trade button) to trade.
 
-Phone and tablet: turn the phone sideways. Left thumb moves (push all the way up to sprint), right thumb drags to look, tap to
-place or use, hold to break. Buttons for Jump, Use, Sneak, Bag and pause; tap the hotbar to pick a slot.
+Phone and tablet: turn the phone sideways. Left thumb moves (push all the way up to sprint), right thumb drags to look, tap a
+mob to hit it, tap anywhere else to place or use, hold to break. Buttons for Jump, Hit, Use, Sneak, Bag and pause; tap the
+hotbar to pick a slot.
 
 ## Phone controls (added after the video)
 
@@ -27,6 +29,17 @@ to fit a phone screen. With a mouse and keyboard it stays switched off, so deskt
 only change inside `fable/` and `opus/` is one `<script>` line in each `index.html`.
 
 To run one locally, serve the whole folder over http (for example `npx serve .`) and open `/fable/` or `/opus/` in Chrome.
+
+## Viewer update (Nov 23)
+
+A viewer asked for fixes and new stuff, so Claude added them to both games after the video:
+
+- Attacking mobs fixed: tap a mob on a phone to hit it, and in Blockhaven tall grass and flowers no longer block hits.
+- A Trade button (or T) appears when you're near a villager, with a proper trade screen.
+- Redrawn textures for every block and item.
+- New biomes (Blossom Grove, mushroom fields, Frost Spires), new mobs and new blocks in each game.
+
+The versions from the video are in the git history at commit `d51061e`.
 
 ## How the test worked
 

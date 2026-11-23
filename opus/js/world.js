@@ -22,7 +22,7 @@ class Noise {
   fbm(x,y,o){ let s=0,a=1,f=1,t=0; for(let i=0;i<o;i++){ s+=this.n2(x*f,y*f)*a; t+=a; a*=0.5; f*=2; } return s/t; }
 }
 const smooth=(a,b,x)=>{ const t=Math.max(0,Math.min(1,(x-a)/(b-a))); return t*t*(3-2*t); };
-export const BIOME_NAMES = ['Plains','Forest','Desert','Snowy Tundra','Ocean','Beach','Mountains','River','Badlands','Swamp','Jungle'];
+export const BIOME_NAMES = ['Plains','Forest','Desert','Snowy Tundra','Ocean','Beach','Mountains','River','Badlands','Swamp','Jungle','Blossom Grove','Fungal Meadow','Frost Spires'];
 
 export class World {
   constructor(seed, dim='over') {
@@ -51,11 +51,14 @@ export class World {
     h = Math.floor(h);
     const temp = this.nD.fbm(wx*0.0016, wz*0.0016, 2) - Math.max(0,(h-85)*0.02);
     const hum = this.nD.fbm(wx*0.0016+3000, wz*0.0016, 2);
+    // rare patches for the newer biomes (blossom grove, fungal meadow, frost spires)
+    const sp = this.nC.fbm(wx*0.0021+5000, wz*0.0021-2000, 2);
     let biome;
     if (river) biome = 7;
     else if (h < SEA-1) biome = 4;
     else if (h <= SEA+1 && temp > -0.3) biome = 5;
     else if (mAmt > 0.45 && h > 88) biome = 6;
+    else if (sp > 0.24 && mAmt < 0.5) biome = temp < -0.12 ? 13 : (hum > -0.05 && temp < 0.35) ? 11 : 12;
     else if (temp < -0.28) biome = 3;
     else if (temp > 0.4 && hum < -0.12) biome = 8;
     else if (hum > 0.28 && temp > -0.15 && h <= SEA+5) biome = 9;
@@ -65,6 +68,7 @@ export class World {
     else biome = 0;
     if (biome === 9) h = SEA - (this.nA.n2(wx*0.07, wz*0.07) > 0.15 ? 1 : 0);
     if (biome === 8) { const p = this.nB.n2(wx*0.02+40, wz*0.02); h += Math.round(smooth(0.0, 0.25, p) * 16); }
+    if (biome === 11) h += Math.round(smooth(0.24, 0.4, sp) * (3 + 5*(this.nA.n2(wx*0.03+77, wz*0.03)+1)));
     return { h, biome, temp };
   }
   rand(x,z,s){ let h = Math.imul(x,374761393) ^ Math.imul(z,668265263) ^ Math.imul(s+this.seed,2246822519); h = Math.imul(h ^ (h>>>13), 1274126177); return ((h ^ (h>>>16))>>>0)/4294967296; }
@@ -209,7 +213,7 @@ export class World {
           if (biome===6) id = h>97 ? B.SNOW : (h>90 ? B.STONE : (C(x,z).temp < -0.15 ? B.SNOW_GRASS : B.GRASS));
           else if (sandy) id = biome===4||biome===7 ? (h<SEA-4? B.GRAVEL : B.SAND) : B.SAND;
           else if (h < SEA) id = biome===4? B.GRAVEL : B.DIRT;
-          else if (biome===3) id = B.SNOW_GRASS; else id = B.GRASS;
+          else if (biome===13) id = this.rand(wx,wz,51) < 0.75 ? B.SNOW : B.SNOW_GRASS; else if (biome===12) id = B.SPORE_TURF; else if (biome===3) id = B.SNOW_GRASS; else id = B.GRASS;
         } else if (y > top-4) {
           if (biome===2) id = y>top-3 ? B.SAND : B.SANDSTONE; else if (sandy) id = B.SAND; else if (biome===6 && h>92) id = B.STONE; else id = B.DIRT;
         } else id = B.STONE;
@@ -220,7 +224,7 @@ export class World {
       if (biome === 9 && h < SEA && this.rand(wx,wz,31) < 0.5) b[(top*CS+z)*CS+x] = B.CLAY;
       if (biome === 9 && b[(top*CS+z)*CS+x] === B.GRASS) b[(top*CS+z)*CS+x] = B.SWAMP_GRASS;
       // water
-      for (let y=top+1; y<=SEA; y++) b[(y*CS+z)*CS+x] = (y===SEA && biome===3) ? B.ICE : B.WATER;
+      for (let y=top+1; y<=SEA; y++) b[(y*CS+z)*CS+x] = (y===SEA && (biome===3 || biome===13)) ? B.ICE : B.WATER;
       // caves
       const underwater = h < SEA+1;
       const capTop = underwater ? h-4 : h;
@@ -242,12 +246,12 @@ export class World {
       const wx=ox+x, wz=oz+z; const {h, biome} = C(x,z);
       if (h < SEA+1 || h > 118) continue;
       const rv = this.rand(wx, wz, 11);
-      let dens = [0.006, 0.045, 0, 0.012, 0, 0, 0.004, 0, 0, 0.025, 0.09][biome];
+      let dens = [0.006, 0.045, 0, 0.012, 0, 0, 0.004, 0, 0, 0.025, 0.09, 0.014, 0.018, 0.009][biome];
       if (biome === 9 && h < SEA && x>=0&&x<CS&&z>=0&&z<CS && rv > 0.9) { const li = ((SEA+1)*CS+z)*CS+x; if (b[li]===B.AIR) b[li] = B.LILY; continue; }
       if (rv < dens) {
         // only if ground was not carved: check generated top for own-chunk; for neighbors assume ok
-        if (x>=0&&x<CS&&z>=0&&z<CS) { const g=b[(h*CS+z)*CS+x]; if (g!==B.GRASS && g!==B.SNOW_GRASS && g!==B.DIRT && g!==B.SWAMP_GRASS) continue; }
-        const kind = biome===10 ? (this.rand(wx,wz,12)<0.35 ? 'jungle' : 'bush') : biome===3||biome===6 ? 'spruce' : (biome===1 && this.rand(wx,wz,12)<0.3 ? 'birch' : 'oak');
+        if (x>=0&&x<CS&&z>=0&&z<CS) { const g=b[(h*CS+z)*CS+x]; if (g!==B.GRASS && g!==B.SNOW_GRASS && g!==B.DIRT && g!==B.SWAMP_GRASS && g!==B.SPORE_TURF && g!==B.SNOW) continue; }
+        const kind = biome===11 ? 'blossom' : biome===12 ? 'mushroom' : biome===13 ? 'spike' : biome===10 ? (this.rand(wx,wz,12)<0.35 ? 'jungle' : 'bush') : biome===3||biome===6 ? 'spruce' : (biome===1 && this.rand(wx,wz,12)<0.3 ? 'birch' : 'oak');
         this.tree(b, x, h+1, z, kind, wx, wz);
       } else if (x>=0&&x<CS&&z>=0&&z<CS) {
         const i = ((h+1)*CS+z)*CS+x; const g = b[(h*CS+z)*CS+x]; if (b[i]!==B.AIR) continue;
@@ -255,7 +259,9 @@ export class World {
         if ((g===B.GRASS||g===B.SAND) && (h===SEA||h===SEA+1) && (C(x+1,z).h<SEA || C(x-1,z).h<SEA || C(x,z+1).h<SEA || C(x,z-1).h<SEA) && p < 0.18) {
           const ht = 1 + (this.rand(wx,wz,16)*3|0); for (let k=0;k<ht;k++) b[((h+1+k)*CS+z)*CS+x] = B.CANE; continue; }
         if (biome===8) { if (p < 0.02) b[i] = B.DEADBUSH; }
-        else if (biome===3 || (biome===6 && h > 90)) { if (g===B.SNOW_GRASS || g===B.SNOW || g===B.STONE) b[i] = B.SNOW_LAYER; }
+        else if (biome===11) { if (g===B.GRASS) { if (p < 0.2) { b[i] = B.PETALS; ch.m[i] = (p*40|0)&3; } else if (p < 0.3) b[i] = B.TALLGRASS; else if (p < 0.31) b[i] = B.ROSE; } }
+        else if (biome===12) { if (g===B.SPORE_TURF) { if (p < 0.025) b[i] = B.RED_MUSHROOM; else if (p < 0.04) b[i] = B.GLOWCAP; } }
+        else if (biome===3 || biome===13 || (biome===6 && h > 90)) { if (g===B.SNOW_GRASS || g===B.SNOW || g===B.STONE) b[i] = B.SNOW_LAYER; }
         else if (biome===2) { if (g===B.SAND) { if (p<0.006) { const ht=1+(this.rand(wx,wz,14)*3|0); for(let k=0;k<ht;k++) b[((h+1+k)*CS+z)*CS+x]=B.CACTUS; } else if (p<0.012) b[i]=B.DEADBUSH; } }
         else if (g===B.GRASS && this.rand(wx>>2,wz>>2,41) < 0.01 && p < 0.25) { b[i] = B.PUMPKIN; ch.m[i] = [0,1,4,5][(p*16|0)&3]; }
         else if (g===B.GRASS) { if (p < (biome===0?0.18:0.08)) b[i]=B.TALLGRASS; else if (p<(biome===0?0.2:0.09)) b[i]=B.ROSE; else if (p<(biome===0?0.22:0.1)) b[i]=B.DANDELION; }
@@ -283,6 +289,29 @@ export class World {
     return ch;
   }
   tree(b, x, y, z, kind, wx, wz) {
+    if (kind === 'blossom' || kind === 'mushroom' || kind === 'spike') {
+      const set3=(xx,yy,zz,id,force)=>{ if(xx<0||xx>=CS||zz<0||zz>=CS||yy<0||yy>=CH) return; const i=(yy*CS+zz)*CS+xx; const o=b[i]; if(force||o===B.AIR||o===B.TALLGRASS||o===B.PETALS||o===B.SNOW_LAYER||o===B.RED_MUSHROOM||o===B.GLOWCAP) b[i]=id; };
+      if (kind === 'blossom') { // short trunk, wide flat pink canopy with drooping edges
+        const ht = 4 + (this.rand(wx,wz,15)*3|0);
+        for (let yy=y+ht-1; yy<=y+ht+1; yy++) { const rad = yy===y+ht+1 ? 1.6 : yy===y+ht ? 3.2 : 2.6; const R = Math.ceil(rad);
+          for (let dx=-R;dx<=R;dx++) for (let dz=-R;dz<=R;dz++) { const d = Math.hypot(dx,dz); if (d > rad || (d > rad-1 && this.rand(wx+dx,wz+dz,yy) < 0.35)) continue; set3(x+dx,yy,z+dz,B.BLOSSOM_LEAVES); } }
+        for (let dx=-3;dx<=3;dx++) for (let dz=-3;dz<=3;dz++) { const d=Math.hypot(dx,dz); if (d>2.2 && d<=3.2 && this.rand(wx+dx,wz+dz,y+77) < 0.3) { set3(x+dx,y+ht-1,z+dz,B.BLOSSOM_LEAVES); set3(x+dx,y+ht-2,z+dz,B.BLOSSOM_LEAVES); } }
+        for (let k=0;k<ht;k++) set3(x,y+k,z,B.BLOSSOM_LOG,true);
+        const bd = this.rand(wx,wz,16)<0.5 ? [1,0] : [0,1]; set3(x+bd[0],y+ht-2,z+bd[1],B.BLOSSOM_LOG,true); set3(x+bd[0]*2,y+ht-1,z+bd[1]*2,B.BLOSSOM_LOG,true);
+      } else if (kind === 'mushroom') { // giant red-capped mushroom
+        const ht = 4 + (this.rand(wx,wz,15)*3|0);
+        for (let k=0;k<ht;k++) set3(x,y+k,z,B.MUSHROOM_STEM,true);
+        for (let dx=-2;dx<=2;dx++) for (let dz=-2;dz<=2;dz++) if (!(Math.abs(dx)===2 && Math.abs(dz)===2)) set3(x+dx,y+ht,z+dz,B.CAP_BLOCK,true);
+        for (let dx=-1;dx<=1;dx++) for (let dz=-1;dz<=1;dz++) set3(x+dx,y+ht+1,z+dz,B.CAP_BLOCK,true);
+        for (let dx=-3;dx<=3;dx++) for (let dz=-3;dz<=3;dz++) { if (Math.abs(dx)!==3 && Math.abs(dz)!==3) continue; if (Math.abs(dx)===3 && Math.abs(dz)===3) continue; set3(x+dx,y+ht-1,z+dz,B.CAP_BLOCK); if (Math.abs(dx)+Math.abs(dz)===3) set3(x+dx,y+ht-2,z+dz,B.CAP_BLOCK); }
+      } else { // packed-ice spire
+        const ht = 6 + (this.rand(wx,wz,15)*16|0); const r0 = ht > 15 ? 2.4 : ht > 10 ? 1.6 : 1.1;
+        for (let k=-2;k<ht;k++) { const rad = r0 * (1 - Math.max(0,k)/ht) + 0.25; const R = Math.ceil(rad);
+          for (let dx=-R;dx<=R;dx++) for (let dz=-R;dz<=R;dz++) if (Math.abs(dx)+Math.abs(dz) <= rad) set3(x+dx,y+k,z+dz,B.PACKED_ICE,true); }
+      }
+      if (kind !== 'spike' && x>=0&&x<CS&&z>=0&&z<CS&&y>0) { const i=((y-1)*CS+z)*CS+x; if(b[i]===B.GRASS||b[i]===B.SPORE_TURF) b[i]=B.DIRT; }
+      return;
+    }
     if (kind === 'bush' || kind === 'jungle') {
       const set2=(xx,yy,zz,id,force)=>{ if(xx<0||xx>=CS||zz<0||zz>=CS||yy<0||yy>=CH) return; const i=(yy*CS+zz)*CS+xx; if(force||b[i]===B.AIR||b[i]===B.TALLGRASS) b[i]=id; };
       if (kind === 'bush') { set2(x,y,z,B.JUNGLE_LOG,true); for (let dx=-2;dx<=2;dx++) for (let dz=-2;dz<=2;dz++) for (let dy=0;dy<=2;dy++) if (Math.abs(dx)+Math.abs(dz)+dy <= 3 && this.rand(wx+dx,wz+dz,y+dy)<0.85) set2(x+dx,y+dy,z+dz,B.JUNGLE_LEAVES); return; }
@@ -429,7 +458,7 @@ export class World {
           if (con(pi+P)) this.boxFull(O, ox+x, y, oz+z, [7/16,h0,bb,9/16,h1,1], T.planks, s, l);
           if (con(pi-P)) this.boxFull(O, ox+x, y, oz+z, [7/16,h0,0,9/16,h1,a], T.planks, s, l); }
         continue; }
-      if (r === 'lily') { this.boxFull(O, ox+x, y, oz+z, [0,0,0,1,0.02,1], T.lily, ps[pi]/15, pl[pi]/15); continue; }
+      if (r === 'lily') { this.boxFull(O, ox+x, y, oz+z, [0,0,0,1,0.02,1], blockTile(id,2,0), ps[pi]/15, pl[pi]/15, [0,0,0,0,0,0].map((_,f)=>f!==2&&f!==3)); continue; }
       if (r === 'ladder') { const L = 1/16; const bx = [[0,0,0,L,1,1],[1-L,0,0,1,1,1],[0,0,0,1,1,L],[0,0,1-L,1,1,1]][pm[pi]&3];
         this.boxFull(O, ox+x, y, oz+z, bx, T.ladder, ps[pi]/15, pl[pi]/15); continue; }
       if (id === B.LANTERN) { this.boxFull(O, ox+x, y, oz+z, [5/16,0,5/16,11/16,9/16,11/16], T.lantern, ps[pi]/15, 1); continue; }

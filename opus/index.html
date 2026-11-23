@@ -81,6 +81,25 @@ img.glint { filter: drop-shadow(0 0 3px #c060ff) drop-shadow(0 0 2px #a040ff) sa
 #cursorItem img { width:100%; height:100%; image-rendering:pixelated; }
 #tooltip { position:fixed; z-index:31; background:rgba(16,0,16,0.94); border:2px solid #2a0a5e; color:#fff; padding:2px 8px; font-size:22px; pointer-events:none; display:none; }
 .creativeGrid { max-height:min(420px, 52vh); padding-right:6px; overflow-y:auto; margin-bottom:10px; }
+/* Trade button (shown near villagers) and trade screen */
+#tradeBtn { position:absolute; left:50%; bottom:160px; transform:translateX(-50%); display:none; pointer-events:auto; z-index:6; font-family:inherit; font-size:28px; padding:6px 26px 8px 54px; color:#fff; text-shadow:2px 2px #1d4a12; cursor:pointer;
+  background-color:#3f9a2c; border:2px solid #000; box-shadow: inset 2px 2px #8ee070, inset -2px -3px #24611a, 0 3px 0 rgba(0,0,0,0.35); animation:tbPop 0.25s ease-out; }
+#tradeBtn.on { display:block; }
+#tradeBtn:hover { background-color:#4cb336; color:#ffffa0; }
+#tradeBtn:active { transform:translateX(-50%) translateY(2px); }
+#tradeBtn:before { content:''; position:absolute; left:14px; top:50%; width:26px; height:26px; margin-top:-13px; background:var(--em) center/contain no-repeat; image-rendering:pixelated; }
+@keyframes tbPop { from { opacity:0; transform:translateX(-50%) scale(0.8); } to { opacity:1; transform:translateX(-50%) scale(1); } }
+.tradeHead { display:flex; align-items:center; gap:12px; margin:0 4px 8px; padding-bottom:6px; border-bottom:2px solid #8b8b8b; }
+.tradeHead > img { width:44px; height:44px; image-rendering:pixelated; background:#8b8b8b; border:2px solid; border-color:#373737 #fff #fff #373737; padding:3px; }
+.tradeHead .tn { font-size:30px; color:#2a2a2a; line-height:1; } .tradeHead .ts { font-size:18px; color:#5a5a5a; }
+.tradeHead .tem { margin-left:auto; display:flex; align-items:center; gap:4px; font-size:28px; color:#1f7a2c; } .tradeHead .tem img { width:28px; height:28px; image-rendering:pixelated; }
+.tradeList { display:grid; grid-template-columns:repeat(2, 1fr); gap:6px; margin:0 0 12px; max-height:min(330px, 42vh); overflow-y:auto; padding-right:4px; }
+.trade { display:flex; align-items:center; gap:6px; padding:5px 8px; border:2px solid; border-color:#fff #373737 #373737 #fff; cursor:pointer; background:#b3d6a2; }
+.trade.ok:hover { background:#c8ecb4; } .trade.no { background:#a9a9a9; cursor:default; } .trade.no .slot img { opacity:0.55; }
+.trade .side { display:flex; align-items:center; gap:5px; flex:1; min-width:0; } .trade .slot { pointer-events:none; flex:none; }
+.trade .nm { font-size:17px; line-height:17px; color:#333; overflow:hidden; } .trade .hv { color:#1f7a2c; } .trade .nv { color:#9a2a2a; }
+.tarr { flex:none; width:22px; height:18px; position:relative; } .tarr:before { content:''; position:absolute; left:0; top:6px; width:12px; height:6px; background:#555; } .tarr:after { content:''; position:absolute; left:11px; top:0; border:9px solid transparent; border-left:11px solid #555; }
+.trade.ok .tarr:before { background:#2a8a20; } .trade.ok .tarr:after { border-left-color:#2a8a20; }
 #death { background:rgba(120,0,0,0.45); }
 #death h1 { font-size:80px; font-weight:normal; text-shadow:4px 4px #3a0000; margin:0 0 30px; }
 #loading .bar2 { width:400px; height:6px; background:#333; margin-top:16px; } #loading .bar2 i { display:block; height:100%; background:#6f6; width:0; }
@@ -99,6 +118,7 @@ img.glint { filter: drop-shadow(0 0 3px #c060ff) drop-shadow(0 0 2px #a040ff) sa
   <div id="bars"><div class="bar" id="hearts"></div><div class="bar" id="food"></div><div class="bar" id="air"></div><div class="bar" id="armorbar"></div></div>
   <div id="xpbar"><i id="xpfill"></i><span id="xplvl"></span></div>
   <div id="hotbar"></div>
+  <button id="tradeBtn" class="tc-tap" type="button">Trade (T)</button>
 </div>
 <div id="inv"><div class="panel" id="invPanel"></div></div>
 <div id="cursorItem"><img><span class="cnt"></span></div>

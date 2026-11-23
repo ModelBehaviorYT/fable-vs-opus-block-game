@@ -128,6 +128,7 @@
     // id, label, size, right, bottom|top
     ['jump', 'Jump', 78, `calc(22px + ${R})`, { bottom: `calc(26px + ${B})` }],
     ['use', 'Use', 60, `calc(106px + ${R})`, { bottom: `calc(112px + ${B})` }],
+    ['hit', 'Hit', 60, `calc(112px + ${R})`, { bottom: `calc(26px + ${B})` }],
     ['sneak', 'Sneak', 56, `calc(24px + ${R})`, { bottom: `calc(128px + ${B})` }],
     ['inv', 'Bag', 48, `calc(74px + ${R})`, { top: `calc(12px + ${T})` }],
     ['pause', '||', 48, `calc(16px + ${R})`, { top: `calc(12px + ${T})` }],
@@ -147,7 +148,7 @@
       layer.appendChild(b); btn[id] = b;
     }
     tipEl = document.createElement('div'); tipEl.id = 'tc-tip';
-    tipEl.innerHTML = 'Left side: move &middot; Right side: drag to look<br>Tap to place &middot; Hold to break &middot; Tap the hotbar to pick';
+    tipEl.innerHTML = 'Left side: move &middot; Right side: drag to look<br>Tap a mob to hit it &middot; Tap to place &middot; Hold to break';
     layer.appendChild(tipEl);
     document.body.appendChild(layer);
     closeEl = document.createElement('div'); closeEl.id = 'tc-close'; closeEl.textContent = 'Close';
@@ -223,11 +224,27 @@
     return -1;
   }
 
+  // The game says whether a mob is under the crosshair (window.__tcAimMob, set by each game).
+  function aimMob() { try { return !!(window.__tcAimMob && window.__tcAimMob()); } catch (e) { return false; } }
+
+  // Game buttons marked .tc-tap (like Trade) sit under this overlay, so find and click them here.
+  function gameButtonAt(x, y) {
+    if (!document.elementsFromPoint) return null;
+    for (const el of document.elementsFromPoint(x, y)) {
+      if (el === layer || layer.contains(el)) continue;
+      const b = el.closest && el.closest('.tc-tap');
+      if (b) return b;
+    }
+    return null;
+  }
+
   function onStart(e) {
     e.preventDefault();
     for (const t of e.changedTouches) {
       const id = t.target && t.target.dataset ? t.target.dataset.tc : null;
       if (id) { buttonDown(id, t); continue; }
+      const gb = gameButtonAt(t.clientX, t.clientY);
+      if (gb) { touches.set(t.identifier, { kind: 'none' }); gb.click(); continue; }
       const slot = hotbarSlotAt(t.clientX, t.clientY);
       if (slot >= 0 && slot < 9) { tapKey('Digit' + (slot + 1)); touches.set(t.identifier, { kind: 'none' }); continue; }
       if (t.clientX < window.innerWidth * 0.4) {
@@ -277,7 +294,10 @@
       } else if (s.kind === 'look') {
         clearTimeout(s.timer);
         if (s.breaking) mouse(0, false);
-        else if (!s.moved) { mouse(2, true); setTimeout(() => mouse(2, false), 90); } // quick tap = place / use
+        else if (!s.moved) { // quick tap: hit the mob under the crosshair, otherwise place / use
+          const b = aimMob() ? 0 : 2;
+          mouse(b, true); setTimeout(() => mouse(b, false), 90);
+        }
       }
     }
   }
@@ -287,6 +307,7 @@
     const b = btn[id]; if (b) b.classList.add('down');
     if (id === 'jump') key('Space', true);
     else if (id === 'use') mouse(2, true);
+    else if (id === 'hit') mouse(0, true);
     else if (id === 'sneak') { sneakOn = !sneakOn; b.classList.toggle('on', sneakOn); key('ShiftLeft', sneakOn); }
     else if (id === 'inv') tapKey('KeyE');
     else if (id === 'pause') document.exitPointerLock();
@@ -295,6 +316,7 @@
     const b = btn[id]; if (b) b.classList.remove('down');
     if (id === 'jump') key('Space', false);
     else if (id === 'use') mouse(2, false);
+    else if (id === 'hit') mouse(0, false);
   }
 
   if (touchMode) document.documentElement.classList.add('tc-touch');

@@ -89,6 +89,9 @@ export const Sound = {
       case 'zombie': this.tone('sawtooth', 110 + R() * 20, 70, 1.0, 0.18, 0, 3); this.noise(0.8, 'lowpass', 400, 1, 0.15); break;
       case 'skeleton': for (let i = 0; i < 5; i++) this.noise(0.04, 'bandpass', 2500 + R() * 1000, 4, 0.35, i * 0.07); break;
       case 'spider': this.noise(0.5, 'bandpass', 2500, 3, 0.25); this.tone('sawtooth', 200, 140, 0.3, 0.06); break;
+      case 'deer': this.tone('triangle', 520 + R() * 80, 760, 0.18, 0.1); this.tone('triangle', 700, 420, 0.22, 0.08, 0.2); break;
+      case 'capling': for (let i = 0; i < 3; i++) this.tone('sine', 500 + R() * 200, 300, 0.07, 0.12, i * 0.08); this.noise(0.1, 'lowpass', 600, 1, 0.15); break;
+      case 'frostling': this.noise(0.6, 'highpass', 3500, 0.6, 0.25); this.tone('sawtooth', 95 + R() * 15, 70, 0.8, 0.12, 0, 4); this.tone('sine', 1800, 2400, 0.3, 0.05, 0.2); break;
       case 'mobhurt': this.tone('square', 400 + R() * 100, 200, 0.15, 0.12); break;
       case 'death': this.tone('sawtooth', 300, 60, 0.6, 0.15); break;
       case 'swim': this.noise(0.25, 'lowpass', 800, 0.7, 0.2); break;

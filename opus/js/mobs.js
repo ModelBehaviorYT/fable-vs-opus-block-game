@@ -6,7 +6,7 @@ function rnd(s){ let a=s; return ()=>{ a=(a*16807)%2147483647; return a/21474836
 function makeTex(key, base, vary, draw, w=8, h=8) {
   const k = key; if (texCache[k]) return texCache[k];
   const c = document.createElement('canvas'); c.width = w; c.height = h; const x = c.getContext('2d'); const r = rnd(key.length*977+13);
-  for (let j=0;j<h;j++) for (let i=0;i<w;i++){ const f = 1 - vary/2 + r()*vary; x.fillStyle = `rgb(${base[0]*f|0},${base[1]*f|0},${base[2]*f|0})`; x.fillRect(i,j,1,1); }
+  for (let j=0;j<h;j++) for (let i=0;i<w;i++){ const f = (1 - vary/2 + r()*vary) * (1.06 - j/(h-1)*0.12); x.fillStyle = `rgb(${Math.min(255,base[0]*f|0)},${Math.min(255,base[1]*f|0)},${Math.min(255,base[2]*f|0)})`; x.fillRect(i,j,1,1); }
   if (draw) draw(x, r);
   const t = new THREE.CanvasTexture(c); t.magFilter = THREE.NearestFilter; t.minFilter = THREE.NearestFilter;  return texCache[k] = t;
 }
@@ -14,14 +14,16 @@ function makeTex(key, base, vary, draw, w=8, h=8) {
 function part(w,h,d, faces, px,py,pz, ox=0, oy=0, oz=0) {
   const g = new THREE.BoxGeometry(w,h,d); g.translate(ox,oy,oz);
   const order = ['right','left','top','bottom','front','back'];
-  const mats = order.map(n => new THREE.MeshBasicMaterial({ map: faces[n] || faces.all, transparent:false }));
+  // per-face shade (top lit, sides dimmer, bottom darkest) so mobs read as solid boxes instead of flat cut-outs
+  const mats = order.map((n,k) => { const mt = new THREE.MeshBasicMaterial({ map: faces[n] || faces.all, transparent:false }); mt.userData.shade = FACE_SHADE[k]; mt.color.setScalar(FACE_SHADE[k]); return mt; });
   const m = new THREE.Mesh(g, mats); m.position.set(px,py,pz); return m;
 }
+const FACE_SHADE = [0.8, 0.8, 1.0, 0.55, 0.92, 0.7];
 const px = (x,c,i,j,w=1,h=1)=>{ x.fillStyle=c; x.fillRect(i,j,w,h); };
 
 function eyes(col, pupil, y=3) { return (x)=>{ px(x,'#fff',1,y,2,1); px(x,'#fff',5,y,2,1); px(x,pupil,2,y,1,1); px(x,pupil,5,y,1,1); }; }
 
-const LURE = { cow: I.WHEAT, sheep: I.WHEAT, pig: I.WHEAT, chicken: I.SEEDS };
+const LURE = { cow: I.WHEAT, sheep: I.WHEAT, pig: I.WHEAT, chicken: I.SEEDS, deer: I.APPLE, capling: I.BONE_MEAL };
 export const MOB_DEFS = {
   cow: { hp:10, hw:0.45, h:1.3, speed:1.2, passive:true, sound:'cow', drops:[[I.BEEF,1,3],[I.LEATHER,0,2]] },
   pig: { hp:10, hw:0.45, h:0.9, speed:1.3, passive:true, sound:'pig', drops:[[I.PORK,1,3]] },
@@ -38,7 +40,13 @@ export const MOB_DEFS = {
   skeleton: { hp:20, hw:0.3, h:1.9, speed:2.4, hostile:true, sound:'skeleton', dmg:3, burns:true, ranged:true, drops:[[I.BONE,0,2],[I.ARROW,0,2]] },
   spider: { hp:16, hw:0.7, h:0.9, speed:3.2, hostile:true, sound:'spider', dmg:2, drops:[[I.STRING,0,2]] },
   fuseling: { hp:20, hw:0.3, h:1.6, speed:2.2, hostile:true, sound:'fizz', explode:true, drops:[[I.GUNPOWDER,0,2]] },
+  // newer mobs: a skittish deer of the blossom groves, a waddling mushroom critter, and an icy brute of the frost spires
+  deer: { hp:10, hw:0.4, h:1.6, rw:0.55, speed:1.5, passive:true, skittish:true, sound:'deer', drops:[[I.VENISON,1,2],[I.LEATHER,0,1]] },
+  capling: { hp:6, hw:0.3, h:0.85, speed:1.0, passive:true, sound:'capling', drops:[[B.RED_MUSHROOM,1,2],[B.GLOWCAP,0,1]] },
+  frostling: { hp:22, hw:0.35, h:2.0, speed:2.1, hostile:true, sound:'frostling', dmg:4, chill:true, drops:[[I.FROST_SHARD,1,3],[B.PACKED_ICE,0,1]] },
 };
+// wider melee/raycast hitboxes for long-bodied mobs (physics keeps the narrow hw so they still fit through gaps)
+for (const [k,w] of [['cow',0.62],['pig',0.58],['sheep',0.62],['spider',0.85],['wolf',0.45],['golem',0.8],['squid',0.5]]) MOB_DEFS[k].rw = w;
 
 function buildModel(type) {
   const g = new THREE.Group(); const legs = []; let head, arms=[];
@@ -140,6 +148,35 @@ function buildModel(type) {
     head.add(part(0.06,0.25,0.06,{all:T('fuse',[60,50,40],0.2)},0.12,0.38,0)); head.add(part(0.08,0.08,0.08,{all:T('spark',[255,190,60],0.1)},0.12,0.53,0));
     const lt = T('leg',[60,55,78],0.2);
     for (const [lx,lz] of [[-1,-1],[1,-1],[-1,1],[1,1]]) { const L=part(0.2,0.45,0.2,{all:lt},lx*0.15,0.45,lz*0.13,0,-0.225,0); legs.push(L); g.add(L); }
+  } else if (type==='deer') {
+    const coat = T('body',[150,98,58],0.14,(x,r)=>{ px(x,'#7a4a26',0,0,8,1); for(let k=0;k<5;k++) px(x,'#efe2cc',1+(r()*6|0),1+(r()*3|0)); px(x,'#d8c2a0',0,6,8,2); });
+    g.add(part(0.5,0.55,1.05,{all:coat, top:T('back',[130,84,48],0.12,(x,r)=>{ for(let k=0;k<6;k++) px(x,'#f2e6d2',r()*8|0,r()*8|0); }), bottom:T('belly',[226,208,180],0.08)},0,1.0,0));
+    g.add(part(0.16,0.18,0.12,{all:T('tail',[244,238,228],0.05)},0,1.12,-0.56));
+    const neck = part(0.26,0.5,0.26,{all:coat},0,1.2,0.42,0,0.22,0); neck.rotation.x = 0.45; g.add(neck);
+    head = part(0.3,0.3,0.42,{all:T('head',[150,98,58],0.1), front:T('face',[150,98,58],0.08,(x)=>{ px(x,'#1a1a1a',0,2,2,2); px(x,'#fff',0,2); px(x,'#1a1a1a',6,2,2,2); px(x,'#fff',7,2); px(x,'#e8d8c0',2,4,4,4); px(x,'#2a1a10',3,6,2,1); })},0,1.62,0.62,0,0,0.05); g.add(head);
+    const ant = T('antler',[226,212,180],0.12);
+    for (const s of [-1,1]) { const a1 = part(0.05,0.32,0.05,{all:ant},s*0.1,0.3,-0.05,0,0.14,0); a1.rotation.z = -s*0.35; head.add(a1); const a2 = part(0.05,0.18,0.05,{all:ant},0,0.24,0,0,0.08,0); a2.rotation.z = s*0.9; a1.add(a2); const a3 = part(0.04,0.14,0.04,{all:ant},0,0.12,0.04,0,0.06,0); a3.rotation.x = 0.6; a1.add(a3);
+      head.add(part(0.06,0.14,0.1,{all:T('ear',[170,116,72],0.1)},s*0.18,0.1,-0.08)); }
+    const legT = T('leg',[118,76,44],0.12,(x)=>{ px(x,'#2a1a10',0,6,8,2); });
+    for (const [lx,lz] of [[-1,-1],[1,-1],[-1,1],[1,1]]) { const L=part(0.13,0.75,0.13,{all:legT},lx*0.16,0.75,lz*0.38,0,-0.375,0); legs.push(L); g.add(L); }
+  } else if (type==='capling') {
+    const capT = T('cap',[196,34,34],0.12,(x,r)=>{ for(let k=0;k<4;k++){ const a=r()*6|0, b=r()*6|0; px(x,'#f4ece2',a,b,2,2); } });
+    const stemT = T('stem',[226,216,196],0.08);
+    g.add(part(0.36,0.4,0.32,{all:stemT, front:T('face',[226,216,196],0.06,(x)=>{ px(x,'#1a1a1a',1,2,2,2); px(x,'#1a1a1a',5,2,2,2); px(x,'#fff',1,2); px(x,'#fff',5,2); px(x,'#e09090',1,5,1,1); px(x,'#e09090',6,5,1,1); px(x,'#5a3020',3,5,2,1); })},0,0.42,0));
+    head = part(0.72,0.26,0.72,{all:capT, bottom:T('gills',[200,170,140],0.1,(x)=>{ for(let i=0;i<8;i+=2) px(x,'#a88a68',i,0,1,8); })},0,0.72,0); g.add(head);
+    head.add(part(0.42,0.14,0.42,{all:capT},0,0.18,0));
+    for (const s of [-1,1]) { const A=part(0.08,0.2,0.08,{all:stemT},s*0.22,0.52,0,0,-0.08,0); arms.push(A); g.add(A); }
+    const legT = T('leg',[180,168,148],0.1);
+    for (const s of [-1,1]) { const L=part(0.13,0.22,0.13,{all:legT},s*0.1,0.22,0,0,-0.11,0); legs.push(L); g.add(L); }
+  } else if (type==='frostling') {
+    const ice = T('body',[120,170,230],0.18,(x,r)=>{ for(let k=0;k<6;k++) px(x,'#d8ecff',r()*8|0,r()*8|0); px(x,'#5a86c8',0,7,8,1); });
+    const dark = T('core',[60,96,170],0.15,(x,r)=>{ for(let k=0;k<4;k++) px(x,'#9cc8ff',r()*8|0,r()*8|0); });
+    head = part(0.55,0.55,0.55,{all:ice, front:T('face',[120,170,230],0.15,(x)=>{ px(x,'#0a1a40',1,2,2,2); px(x,'#0a1a40',5,2,2,2); px(x,'#c8faff',1,3); px(x,'#c8faff',6,3); px(x,'#1a2a5a',2,5,4,1); px(x,'#e8f8ff',2,6); px(x,'#e8f8ff',5,6); })},0,1.75,0); g.add(head);
+    for (const [sx,sz,h2] of [[-0.18,0,0.3],[0.15,0.1,0.22],[0,-0.15,0.36]]) { const sp = part(0.1,h2,0.1,{all:T('spike',[210,236,255],0.1)},sx,0.3+h2/2,sz); sp.rotation.z = sx*1.2; head.add(sp); }
+    g.add(part(0.62,0.8,0.36,{all:dark, front:ice},0,1.1,0));
+    for (const s of [-1,1]) { const sh = part(0.22,0.22,0.22,{all:T('spike',[210,236,255],0.1)},s*0.38,1.55,0); sh.rotation.y = 0.785; g.add(sh); }
+    for (const s of [-1,1]) { const A=part(0.24,0.85,0.24,{all:ice}, s*0.43,1.42,0, 0,-0.36,0); arms.push(A); g.add(A); }
+    for (const s of [-1,1]) { const L=part(0.26,0.72,0.26,{all:dark}, s*0.15,0.72,0, 0,-0.36,0); legs.push(L); g.add(L); }
   }
   g.traverse(o=>{ if (o.isMesh) o.material.forEach(m=>m.userData.base=true); });
   return { g, legs, head, arms };
@@ -155,7 +192,7 @@ export class Mobs {
       const col = [0x8a5530,0xd0d0d0,0xf0c830][Math.random()*3|0]; const hm = new THREE.Mesh(new THREE.BoxGeometry(0.58,0.32,0.58), new THREE.MeshBasicMaterial({color:col})); hm.position.y = 0.17; hm.material.userData.base = col; model.head.add(hm); m.armorPts = 2; }
     this.G.scene.add(model.g); this.list.push(m); return m;
   }
-  setTint(m, r, g, b) { m.model.g.traverse(o=>{ if (o.isMesh) for (const mt of (Array.isArray(o.material)?o.material:[o.material])) { if (mt.userData.base !== undefined && mt.userData.base !== true) mt.color.setHex(mt.userData.base).multiply(new THREE.Color(r,g,b)); else mt.color.setRGB(r,g,b); } }); }
+  setTint(m, r, g, b) { m.model.g.traverse(o=>{ if (o.isMesh) for (const mt of (Array.isArray(o.material)?o.material:[o.material])) { const s = mt.userData.shade || 1; if (mt.userData.base !== undefined && mt.userData.base !== true) mt.color.setHex(mt.userData.base).multiply(new THREE.Color(r*s,g*s,b*s)); else mt.color.setRGB(r*s,g*s,b*s); } }); }
   update(dt) {
     const G = this.G, P = G.player, W = G.world;
     // village population (checked every frame so villages are never empty)
@@ -178,12 +215,16 @@ export class Mobs {
         const top = W.getBlock(x,y,z);
         if (SOLID[top] && W.getBlock(x,y+1,z)===0 && W.getBlock(x,y+2,z)===0) {
           const wb = W.col(x,z).biome;
-          if (!night && (wb===2 || wb===3) && (top===B.SAND || top===B.SNOW_GRASS || top===B.SNOW) && Math.random() < 0.15 && this.list.filter(m=>m.type==='rabbit').length < 4) { this.spawn('rabbit', x+0.5, y+1, z+0.5); this.spawn('rabbit', x+1.5, y+1, z+1.5); }
+          const cnt = t => this.list.filter(m=>m.type===t).length;
+          if (wb===13 && (top===B.SNOW || top===B.SNOW_GRASS || top===B.PACKED_ICE) && Math.random() < (night ? 0.5 : 0.12) && cnt('frostling') < 4 && hostile < 14) this.spawn('frostling', x+0.5, y+1, z+0.5);
+          else if (wb===12 && top===B.SPORE_TURF && Math.random() < 0.3 && cnt('capling') < 6) { for (let k=0;k<2+(Math.random()*2|0);k++) this.spawn('capling', x+0.5+(k%2), y+1, z+0.5+(k>>1)); }
+          else if (!night && (wb===11 || wb===1) && top===B.GRASS && Math.random() < (wb===11 ? 0.35 : 0.06) && cnt('deer') < 5) { this.spawn('deer', x+0.5, y+1, z+0.5); this.spawn('deer', x+1.5, y+1, z+1.5); }
+          else if (!night && (wb===2 || wb===3) && (top===B.SAND || top===B.SNOW_GRASS || top===B.SNOW) && Math.random() < 0.15 && this.list.filter(m=>m.type==='rabbit').length < 4) { this.spawn('rabbit', x+0.5, y+1, z+0.5); this.spawn('rabbit', x+1.5, y+1, z+1.5); }
           else if (!night && (wb===1 || wb===3) && (top===B.GRASS || top===B.SNOW_GRASS) && Math.random()<0.12 && this.list.filter(m=>m.type==='wolf').length < 4) { this.spawn('wolf', x+0.5, y+1, z+0.5); this.spawn('wolf', x+1.5, y+1, z+0.5); }
           else if (!night && passive < 10 && top===B.GRASS && Math.random()<0.5) {
             const types = ['cow','pig','sheep','chicken']; const t = types[Math.random()*4|0];
             for (let k=0;k<2+(Math.random()*2|0);k++) { const ox=x+(Math.random()*4-2|0), oz=z+(Math.random()*4-2|0); let yy=y+3; while(yy>1&&!SOLID[W.getBlock(ox,yy-1,oz)]) yy--; if(Math.abs(yy-y-1)<3) this.spawn(t, ox+0.5, yy, oz+0.5); }
-          } else if (night && hostile < 14 && top!==B.WATER) {
+          } else if (night && hostile < 14 && top!==B.WATER && wb!==12) { // fungal meadows stay free of surface monsters
             const types = W.dim==='nether' ? ['ember','ember','skeleton'] : wb===9 ? ['slime','slime','zombie'] : ['zombie','zombie','skeleton','spider','fuseling']; this.spawn(types[Math.random()*types.length|0], x+0.5, y+1, z+0.5);
           }
         }
@@ -218,6 +259,8 @@ export class Mobs {
       const canTarget = !P.peace && P.alive && P.mode === 'survival' && dist < 18 && Math.abs(dy) < 10;
       const aggressive = d.hostile && canTarget && !(m.type==='spider' && day > 0.6 && !m.angry);
       m.ai.t -= dt;
+      // skittish animals bolt away from a player who walks up (sneak or hold their food to get close)
+      if (d.skittish && !(m.panic > 0) && dist < 6 && P.alive && !P.peace && !P.sneak && G.heldId() !== LURE[m.type]) { m.panic = 1.6; m.ai.t = 0.9; const l = dist || 1; m.ai.dir = [-dx/l, -dz/l]; }
       if (d.aquatic) {
         if (m.inWater) { m.ai.t -= dt; if (m.ai.t <= 0 || !m.swim) { m.ai.t = 1.5 + Math.random()*3; const a = Math.random()*6.28; m.swim = [Math.cos(a)*1.4, (Math.random()-0.5)*1.2, Math.sin(a)*1.4]; }
           if (W.getBlock(Math.floor(m.pos.x), Math.floor(m.pos.y+1.2), Math.floor(m.pos.z)) !== B.WATER) m.swim[1] = -Math.abs(m.swim[1]) - 0.3;
@@ -246,7 +289,8 @@ export class Mobs {
           m.yaw = Math.atan2(dx, dz); m.model.g.scale.y = m.onGround ? 0.85 : 1.1;        } else {
           mx = nx; mz = nz;
           m.atkT -= dt;
-          if (dist < 1.3 + d.hw && Math.abs(dy) < 1.6 && m.atkT <= 0) { m.atkT = 1; G.hurtPlayer(d.dmg, m.pos); }
+          if (dist < 1.3 + d.hw && Math.abs(dy) < 1.6 && m.atkT <= 0) { m.atkT = 1; G.hurtPlayer(d.dmg, m.pos); m.swingT = 0.35;
+            if (d.chill && P.mode==='survival') { P.chillT = 3; G.particles(P.pos.x, P.pos.y+1, P.pos.z, null, 8, 0xc8e8ff, true); } }
           if (m.type==='spider' && m.onGround && dist < 4 && dist > 2 && Math.random()<0.02) { m.vel.y = 7; }
         }
         m.yaw = Math.atan2(dx, dz);
@@ -305,6 +349,9 @@ export class Mobs {
       if (m.type==='chicken') m.model.arms.forEach((a,j)=>a.rotation.z = m.onGround?0: Math.sin(performance.now()/40)*0.6*(j?1:-1));
       if (m.type==='golem') { m.swingT = (m.swingT||0) - dt; m.model.arms.forEach((a,j)=>a.rotation.x = m.swingT > 0 ? -1.6*Math.sin(m.swingT/0.4*Math.PI) : (j? sw : -sw)*0.6); }
       if (m.type==='zombie') m.model.arms.forEach((a,j)=>a.rotation.x = -Math.PI/2 + Math.sin(m.walk+j*3)*0.1);
+      if (m.type==='capling') m.model.arms.forEach((a,j)=>a.rotation.z = (j?1:-1)*(0.3 + Math.abs(sw)*0.8));
+      if (m.type==='frostling') { m.swingT = (m.swingT||0) - dt; m.model.arms.forEach((a,j)=>a.rotation.x = m.swingT > 0 ? -2.2*Math.sin(m.swingT/0.35*Math.PI) : aggressive ? -1.1 + (j?sw:-sw)*0.3 : (j?sw:-sw)*0.8); }
+      if (m.type==='deer') m.model.head.rotation.x = (!aggressive && hs < 0.2 && Math.sin(m.walk*0.3 + m.soundT) > 0.6) ? 0.9 : 0;
       m.model.g.position.copy(m.pos); m.model.g.rotation.y = m.yaw;
       // lighting
       if (m.hurtT <= 0 && m.fuse < 0 && !d.fireproof) { const l = G.brightnessAt(m.pos.x, m.pos.y+0.5, m.pos.z); if (Math.abs((m.lastL||0)-l) > 0.02) { m.lastL = l; this.setTint(m, l, l, l); } }
@@ -354,7 +401,8 @@ export class Mobs {
   raycast(origin, dir, maxD) {
     let best = null, bd = maxD;
     for (const m of this.list) { if (m.deadT>=0) continue;
-      const min = [m.pos.x-m.hw, m.pos.y, m.pos.z-m.hw], max = [m.pos.x+m.hw, m.pos.y+m.h, m.pos.z+m.hw];
+      const k = m.baby > 0 ? 0.6 : 1, w = (m.d.rw || m.hw) * k, hh = m.h * k;
+      const min = [m.pos.x-w, m.pos.y, m.pos.z-w], max = [m.pos.x+w, m.pos.y+hh, m.pos.z+w];
       let t0 = 0, t1 = bd; const o=[origin.x,origin.y,origin.z], d=[dir.x,dir.y,dir.z]; let ok = true;
       for (let a=0;a<3;a++){ if (Math.abs(d[a])<1e-9){ if(o[a]<min[a]||o[a]>max[a]){ok=false;break;} continue; } let ta=(min[a]-o[a])/d[a], tb=(max[a]-o[a])/d[a]; if(ta>tb){const t=ta;ta=tb;tb=t;} t0=Math.max(t0,ta); t1=Math.min(t1,tb); if(t0>t1){ok=false;break;} }
       if (ok && t0 < bd) { bd = t0; best = m; } }

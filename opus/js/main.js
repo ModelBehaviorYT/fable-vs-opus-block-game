@@ -102,7 +102,7 @@ function updateWeather(dt) {
   weather.t -= dt; if (weather.t <= 0) { weather.storm = !weather.raining && Math.random() < 0.4; weather.raining = !weather.raining; weather.t = weather.raining ? 120+Math.random()*240 : 300+Math.random()*600; }
   weather.amt += ((weather.raining?1:0) - weather.amt) * Math.min(1, dt*0.3);
   const cp = camera.getWorldPosition(new THREE.Vector3());
-  const c = world.col(Math.floor(cp.x), Math.floor(cp.z)); const snow = c.biome===3 || (c.biome===6 && c.h>90); const dry = c.biome===2 || world.dim==='nether';
+  const c = world.col(Math.floor(cp.x), Math.floor(cp.z)); const snow = c.biome===3 || c.biome===13 || (c.biome===6 && c.h>90); const dry = c.biome===2 || world.dim==='nether';
   const covered = world.getSky(Math.floor(cp.x), Math.floor(cp.y), Math.floor(cp.z)) < 12;
   rain.visible = weather.amt > 0.05 && !dry && !covered && !titleMode;
   if (!rain.visible) return;
@@ -191,7 +191,7 @@ function physics(e, dt) {
 function groundUnder(e){ const y=Math.floor(e.pos.y-0.05); for (const [dx,dz] of [[-1,-1],[1,-1],[-1,1],[1,1]]) if (solidAt(Math.floor(e.pos.x+dx*e.hw*0.98), y, Math.floor(e.pos.z+dz*e.hw*0.98))) return true; return false; }
 
 // ---------- raycast ----------
-function raycast(o, d, maxD) {
+function raycast(o, d, maxD, solidOnly) {
   let x=Math.floor(o.x), y=Math.floor(o.y), z=Math.floor(o.z);
   const sx=Math.sign(d.x), sy=Math.sign(d.y), sz=Math.sign(d.z);
   const tdx=Math.abs(1/d.x), tdy=Math.abs(1/d.y), tdz=Math.abs(1/d.z);
@@ -199,7 +199,7 @@ function raycast(o, d, maxD) {
   let n=[0,0,0], t=0;
   for (let i=0;i<200 && t<=maxD;i++) {
     const id = world.getBlock(x,y,z);
-    if (id && BLOCKS[id].target) return { x,y,z,id,n,dist:t };
+    if (id && BLOCKS[id].target && (!solidOnly || SOLID[id])) return { x,y,z,id,n,dist:t };
     if (tx<ty && tx<tz) { x+=sx; t=tx; tx+=tdx; n=[-sx,0,0]; } else if (ty<tz) { y+=sy; t=ty; ty+=tdy; n=[0,-sy,0]; } else { z+=sz; t=tz; tz+=tdz; n=[0,0,-sz]; }
   }
   return null;
@@ -387,7 +387,7 @@ let worlds = { over: null, nether: null };
 function makeWorld(seed, dim) {
   const w = new World(seed, dim);
   w.decayQ = [];
-  w.onChange = (x,y,z,old,id) => { if ((old===B.LOG||old===B.SPRUCE_LOG||old===B.BIRCH_LOG||old===B.JUNGLE_LOG) && id!==old) {
+  w.onChange = (x,y,z,old,id) => { if ((old===B.LOG||old===B.SPRUCE_LOG||old===B.BIRCH_LOG||old===B.JUNGLE_LOG||old===B.BLOSSOM_LOG) && id!==old) {
     for (let dx=-4;dx<=4;dx++) for (let dy=-3;dy<=6;dy++) for (let dz=-4;dz<=4;dz++) if (BLOCKS[w.getBlock(x+dx,y+dy,z+dz)].leaves) w.decayQ.push([x+dx,y+dy,z+dz, performance.now()/1000 + 2 + Math.random()*10]); } };
   w.onFall = (x,y,z,id) => { w.setBlock(x,y,z,B.AIR); const mesh = makeItemMesh(id, 1); scene.add(mesh); fallingBlocks.push({ id, pos:new THREE.Vector3(x+0.5,y,z+0.5), vel:new THREE.Vector3(), hw:0.49, h:0.98, mesh, t:0 }); };
   return w;
@@ -481,10 +481,11 @@ let nameT = 0; function showItemName(){ const s=held(); $('itemname').textConten
 let msgT = 0; function showMsg(t){ $('msg').textContent=t; msgT=3; }
 
 // ---------- crafting ----------
-const LOGS=[B.LOG,B.SPRUCE_LOG,B.BIRCH_LOG], PL=[B.PLANKS];
+const LOGS=[B.LOG,B.SPRUCE_LOG,B.BIRCH_LOG,B.JUNGLE_LOG], PL=[B.PLANKS,B.BLOSSOM_PLANKS];
 const RECIPES = [];
 function R(pat, key, out, n=1){ RECIPES.push({pat, key, out, n}); }
-R(['L'],{L:LOGS},B.PLANKS,4);
+R(['L'],{L:LOGS},B.PLANKS,4); R(['L'],{L:[B.BLOSSOM_LOG]},B.BLOSSOM_PLANKS,4);
+R(['II','II'],{I:[B.PACKED_ICE]},B.FROST_BRICKS,4); R(['SS','SS'],{S:[I.FROST_SHARD]},B.PACKED_ICE,1); R(['RR','RR'],{R:[B.RED_MUSHROOM]},B.CAP_BLOCK,1); R(['G','s'],{G:[B.GLOWCAP],s:[I.STICK]},B.TORCH,2);
 R(['P','P'],{P:PL},I.STICK,4);
 R(['PP','PP'],{P:PL},B.CRAFTING,1);
 R(['CCC','C C','CCC'],{C:[B.COBBLE]},B.FURNACE,1);
@@ -545,7 +546,7 @@ let decayBoost = 0;
 function decayLeaf(x,y,z) {
   const id = world.getBlock(x,y,z); if (!BLOCKS[id].leaves) return;
   if (!(world.isLoaded(x-5,z-5) && world.isLoaded(x+5,z+5) && world.isLoaded(x-5,z+5) && world.isLoaded(x+5,z-5))) return;
-  for (let dx=-4;dx<=4;dx++) for (let dy=-4;dy<=4;dy++) for (let dz=-4;dz<=4;dz++) { const b=world.getBlock(x+dx,y+dy,z+dz); if (b===B.LOG||b===B.SPRUCE_LOG||b===B.BIRCH_LOG||b===B.JUNGLE_LOG) return; }
+  for (let dx=-4;dx<=4;dx++) for (let dy=-4;dy<=4;dy++) for (let dz=-4;dz<=4;dz++) { const b=world.getBlock(x+dx,y+dy,z+dz); if (b===B.LOG||b===B.SPRUCE_LOG||b===B.BIRCH_LOG||b===B.JUNGLE_LOG||b===B.BLOSSOM_LOG) return; }
   world.setBlock(x,y,z,B.AIR,0,true); const ch = world.getChunk(x>>4,z>>4); ch.needLight=false; ch.relightSoon=true;
   if (parts.length < 120) particles(x+0.5,y+0.5,z+0.5,id,3);
   const r=Math.random(); if (r<0.05) spawnDrop(id===B.JUNGLE_LEAVES?B.SAPLING:B.SAPLING,1,x+0.5,y+0.5,z+0.5); else if (r<0.07 && id===B.LEAVES) spawnDrop(I.APPLE,1,x+0.5,y+0.5,z+0.5);
@@ -584,25 +585,41 @@ function randomTicks(dt) {
 }
 // ---------- villager trading ----------
 const TRADE_SETS = {
-  Farmer: [[[I.WHEAT,20],[I.EMERALD,1]], [[I.EMERALD,1],[I.BREAD,6]], [[I.EMERALD,1],[I.APPLE,4]], [[B.PUMPKIN,6],[I.EMERALD,1]], [[I.EMERALD,3],[I.CAKE_ITEM,1]]],
-  Librarian: [[[I.PAPER,24],[I.EMERALD,1]], [[I.EMERALD,9],[B.BOOKSHELF,1]], [[I.EMERALD,1],[B.GLASS,4]], [[I.EMERALD,5],[B.LANTERN,1]]],
-  Smith: [[[I.COAL,15],[I.EMERALD,1]], [[I.IRON,4],[I.EMERALD,1]], [[I.EMERALD,3],[I.IPICK,1]], [[I.EMERALD,7],[I.ICHEST,1]], [[I.EMERALD,12],[I.DSWORD,1]]],
-  Butcher: [[[I.CHICKEN,14],[I.EMERALD,1]], [[I.PORK,7],[I.EMERALD,1]], [[I.EMERALD,1],[I.COOKED_PORK,5]], [[I.EMERALD,1],[I.STEAK,3]]],
+  Farmer: [[[I.WHEAT,20],[I.EMERALD,1]], [[I.EMERALD,1],[I.BREAD,6]], [[I.EMERALD,1],[I.APPLE,4]], [[B.PUMPKIN,6],[I.EMERALD,1]], [[I.EMERALD,3],[I.CAKE_ITEM,1]], [[I.SEEDS,24],[I.EMERALD,1]], [[I.EMERALD,1],[B.SAPLING,3]], [[I.EMERALD,2],[I.ROAST_MUSHROOM,6]]],
+  Librarian: [[[I.PAPER,24],[I.EMERALD,1]], [[I.EMERALD,9],[B.BOOKSHELF,1]], [[I.EMERALD,1],[B.GLASS,4]], [[I.EMERALD,5],[B.LANTERN,1]], [[I.EMERALD,4],[I.COMPASS,1]], [[I.EMERALD,4],[I.CLOCK,1]], [[I.EMERALD,2],[I.LAPIS,6]]],
+  Smith: [[[I.COAL,15],[I.EMERALD,1]], [[I.IRON,4],[I.EMERALD,1]], [[I.EMERALD,3],[I.IPICK,1]], [[I.EMERALD,7],[I.ICHEST,1]], [[I.EMERALD,12],[I.DSWORD,1]], [[I.EMERALD,2],[I.ISWORD,1]], [[I.EMERALD,4],[I.IHELM,1]], [[I.EMERALD,1],[I.SHEARS,1]]],
+  Butcher: [[[I.CHICKEN,14],[I.EMERALD,1]], [[I.PORK,7],[I.EMERALD,1]], [[I.EMERALD,1],[I.COOKED_PORK,5]], [[I.EMERALD,1],[I.STEAK,3]], [[I.VENISON,8],[I.EMERALD,1]], [[I.EMERALD,1],[I.COOKED_VENISON,4]], [[I.LEATHER,6],[I.EMERALD,1]]],
+  Mason: [[[B.COBBLE,24],[I.EMERALD,1]], [[I.EMERALD,1],[B.STONEBRICK,8]], [[I.EMERALD,1],[B.BRICKS,8]], [[I.EMERALD,2],[B.FROST_BRICKS,8]], [[I.FROST_SHARD,10],[I.EMERALD,1]], [[I.EMERALD,1],[B.TERRA_RED,8]], [[I.EMERALD,3],[B.GLOWSTONE,4]]],
 };
+const JOB_ICON = { Farmer:I.WHEAT, Librarian:B.BOOKSHELF, Smith:I.IPICK, Butcher:I.STEAK, Mason:B.STONEBRICK };
 function countItem(id){ return P.inv.reduce((n,s)=> n + (s && s.id===id ? s.count : 0), 0); }
 function takeItem(id, n){ for (let i=0;i<36&&n;i++){ const s=P.inv[i]; if (s && s.id===id){ const a=Math.min(n,s.count); s.count-=a; n-=a; if(!s.count) P.inv[i]=null; } } }
 function openTrade(v) {
+  if (!v || v.deadT >= 0) return;
   if (!v.job) { const jobs = Object.keys(TRADE_SETS); v.job = jobs[(Math.random()*jobs.length)|0]; }
+  for (const k in keys) keys[k] = false; mouseL = mouseR = false; P.eating = false; P.drawing = false;
+  v.ai.t = 6; v.ai.dir = null; v.vel.x = v.vel.z = 0; v.yaw = Math.atan2(P.pos.x - v.pos.x, P.pos.z - v.pos.z); // the villager stops and faces you
   ui = { type:'trade', villager:v, grid:[], size:0 }; setState('inv'); renderUI();
 }
 function tradeHTML() {
-  const v = ui.villager; let h = `<div class="t">${v.job} — click a trade</div><div style="display:flex;flex-direction:column;gap:6px;margin:6px 0 12px">`;
-  TRADE_SETS[v.job].forEach(([[gi,gn],[ri,rn]],k) => { const ok = countItem(gi) >= gn;
-    h += `<div class="trade" data-t="${k}" style="display:flex;align-items:center;gap:14px;padding:4px 10px;background:${ok?'#9fbf8f':'#a8a8a8'};border:2px solid;border-color:#fff #373737 #373737 #fff;cursor:${ok?'pointer':'default'};opacity:${ok?1:0.6}">
-      <div class="slot" style="pointer-events:none">${slotHTML({id:gi,count:gn})}</div><span style="font-size:30px">→</span><div class="slot" style="pointer-events:none">${slotHTML({id:ri,count:rn})}</div>
-      <span style="font-size:20px">${itemName(gi)} for ${itemName(ri)}</span></div>`; });
+  const v = ui.villager; const em = countItem(I.EMERALD);
+  let h = `<div class="tradeHead"><img src="${iconURL(JOB_ICON[v.job]||I.EMERALD)}"><div><div class="tn">${v.job}</div><div class="ts">Give the items on the left to get the item on the right</div></div><div class="tem"><img src="${iconURL(I.EMERALD)}"><span>${em}</span></div></div><div class="tradeList">`;
+  TRADE_SETS[v.job].forEach(([[gi,gn],[ri,rn]],k) => { const have = countItem(gi), ok = have >= gn;
+    h += `<div class="trade ${ok?'ok':'no'}" data-t="${k}" title="${itemName(gi)} x${gn} for ${itemName(ri)}${rn>1?' x'+rn:''}">
+      <div class="side"><div class="slot">${slotHTML({id:gi,count:gn})}</div><div class="nm">${itemName(gi)}<br><span class="${ok?'hv':'nv'}">have ${have}</span></div></div>
+      <div class="tarr"></div>
+      <div class="side"><div class="slot">${slotHTML({id:ri,count:rn})}</div><div class="nm">${itemName(ri)}</div></div></div>`; });
   return h + `</div>`;
 }
+function nearestVillager(maxD) { if (!mobs) return null; let best = null, bd = maxD;
+  for (const m of mobs.list) { if (m.type !== 'villager' || m.deadT >= 0) continue; const d = Math.hypot(m.pos.x-P.pos.x, (m.pos.y-P.pos.y)*1.5, m.pos.z-P.pos.z); if (d < bd) { bd = d; best = m; } }
+  return best; }
+// on-screen Trade button: shown in play whenever a villager is within ~4 blocks
+const tradeBtn = $('tradeBtn'); tradeBtn.style.setProperty('--em', `url(${iconURL(I.EMERALD)})`);
+function updateTradeBtn() { const v = state==='play' && P.alive && !titleMode ? nearestVillager(4) : null; tradeBtn.classList.toggle('on', !!v); return v; }
+function tradeNearest() { if (state !== 'play') return false; const v = nearestVillager(4.5); if (!v) return false; Sound.play('villager'); openTrade(v); return true; }
+tradeBtn.addEventListener('mousedown', e => { e.stopPropagation(); e.preventDefault(); });
+tradeBtn.addEventListener('click', e => { e.stopPropagation(); e.preventDefault(); Sound.init(); tradeNearest(); });
 invPanel.addEventListener('click', e => { const el = e.target.closest('.trade'); if (!el || !ui || ui.type!=='trade') return;
   const [[gi,gn],[ri,rn]] = TRADE_SETS[ui.villager.job][+el.dataset.t]; if (countItem(gi) < gn) { Sound.play('villager'); return; }
   takeItem(gi, gn); const it = ITEMS[ri]; const left = addItem(ri, rn, it && it.dur ? it.dur : undefined); if (left) spawnDrop(ri, left, P.pos.x, P.pos.y+1, P.pos.z);
@@ -806,7 +823,7 @@ function interact() {
   const o = camera.getWorldPosition(new THREE.Vector3()); const d = dirVec();
   const hit = raycast(eyePos(), d, P.mode==='creative'?6:5);
   const s = held();
-  { const mh = mobs.raycast(eyePos(), d, 3.5); if (mh && (!hit || mh.dist < hit.dist)) {
+  { const mh = mobs.raycast(eyePos(), d, 3.5); if (mh && !raycastSolid(eyePos(), d, mh.dist)) {
       const fr = s ? mobs.feed(mh.mob, s.id) : false; if (fr === 'tool') { useTool(); P.swing=0.3; return true; }
       if (fr === 'milk') { if (P.mode==='survival') { if (s.count===1) P.inv[P.sel] = {id:I.MILK_BUCKET,count:1}; else { s.count--; if (addItem(I.MILK_BUCKET,1)) spawnDrop(I.MILK_BUCKET,1,P.pos.x,P.pos.y+1,P.pos.z); } } refreshHUD(); P.swing=0.3; return true; }
       if (fr) { if (P.mode==='survival') { s.count--; if (!s.count) P.inv[P.sel]=null; refreshHUD(); } P.swing=0.3; return true; }
@@ -857,7 +874,7 @@ function interact() {
     if (ov(P) || mobs.list.some(ov)) return false; }
   let torchMeta = 0;
   if (s.id===B.TORCH && hit.n[1]===0 && SOLID[hit.id]) torchMeta = hit.n[0]===1 ? 1 : hit.n[0]===-1 ? 2 : hit.n[2]===1 ? 3 : 4;
-  else if ((bd.plant || s.id===B.TORCH) ) { const below = world.getBlock(tx,ty-1,tz); if (!SOLID[below]) return false; if (bd.plant && s.id!==B.DEADBUSH && below!==B.GRASS && below!==B.DIRT && below!==B.SNOW_GRASS) return false; }
+  else if ((bd.plant || s.id===B.TORCH) ) { const below = world.getBlock(tx,ty-1,tz); if (!SOLID[below]) return false; if (bd.plant && s.id!==B.DEADBUSH && !bd.mush && below!==B.GRASS && below!==B.DIRT && below!==B.SNOW_GRASS && below!==B.SPORE_TURF) return false; }
   if (s.id===B.CACTUS) { const below=world.getBlock(tx,ty-1,tz); if (below!==B.SAND && below!==B.CACTUS) return false; }
   let meta = 0; if (s.id===B.FURNACE || s.id===B.CHEST || s.id===B.PUMPKIN || s.id===B.JACK) { const a = Math.round(P.yaw/(Math.PI/2)) & 3; meta = [4,0,5,1][a]; }
   if (s.id===B.TORCH) meta = torchMeta;
@@ -871,12 +888,24 @@ function interact() {
   P.swing = 0.3; return true;
 }
 function eyePos(){ return new THREE.Vector3(P.pos.x, P.pos.y + (P.sneak?1.27:1.62), P.pos.z); }
+// the mob in melee reach under the crosshair, unless a solid block is closer. Grass, flowers, torches and
+// other walk-through blocks do not shield a mob (before, tall grass in front of a pig or spider ate the hit).
+function aimedMob() {
+  if (!mobs || !world) return null;
+  const e = eyePos(), d = dirVec(); const hit = mobs.raycast(e, d, 3.5); if (!hit) return null;
+  const bh = raycastSolid(e, d, hit.dist); return bh && bh.dist < hit.dist ? null : hit;
+}
+function raycastSolid(o, d, maxD) { return raycast(o, d, maxD, true); }
 function attack() {
-  P.swing = 0.3;
-  const hit = mobs.raycast(eyePos(), dirVec(), 3.5); const bh = raycast(eyePos(), dirVec(), 5);
-  if (hit && (!bh || bh.dist > hit.dist)) { const s=held(); const it=s&&s.id>=256?ITEMS[s.id]:null; let dmg = it&&it.dmg ? it.dmg : 1; if (s && s.ench && it && it.tool==='sword') dmg += Math.ceil(s.ench*1.25); if (!P.onGround && P.vel.y<0) dmg = Math.floor(dmg*1.5); mobs.hurt(hit.mob, dmg, P.pos); if (it && it.tool) useTool(); P.exh += 0.1; return true; }
+  P.swing = 0.3; P.atkCD = 0.45;
+  const hit = aimedMob();
+  if (hit) { const s=held(); const it=s&&s.id>=256?ITEMS[s.id]:null; let dmg = it&&it.dmg ? it.dmg : 1; if (s && s.ench && it && it.tool==='sword') dmg += Math.ceil(s.ench*1.25); const crit = !P.onGround && P.vel.y<0; if (crit) dmg = Math.floor(dmg*1.5); mobs.hurt(hit.mob, dmg, P.pos);
+    particles(hit.mob.pos.x, hit.mob.pos.y + hit.mob.h*0.6, hit.mob.pos.z, null, crit ? 8 : 4, crit ? 0xffe060 : 0xffffff, true);
+    if (it && it.tool) useTool(); P.exh += 0.1; breakT = 0; breakTarget = null; return true; }
   return false;
 }
+// touch.js asks this on a quick tap: true means the tap should be a left-click attack (villagers stay right-click so tapping one trades)
+window.__tcAimMob = () => { try { if (state !== 'play' || !P.alive) return false; const h = aimedMob(); return !!(h && h.mob.deadT < 0 && h.mob.type !== 'villager'); } catch (e) { return false; } };
 function pickBlock(){ const h=raycast(eyePos(),dirVec(),6); if (!h) return; const id = h.id===B.FURNACE_LIT?B.FURNACE:h.id; const idx=P.inv.slice(0,9).findIndex(s=>s&&s.id===id); if (idx>=0) P.sel=idx; else if (P.mode==='creative') P.inv[P.sel]={id,count:64}; refreshHUD(); showItemName(); }
 
 // ---------- input ----------
@@ -885,13 +914,14 @@ addEventListener('keydown', e => {
   Sound.init();
   const k = e.code;
   if (k==='F5' || k==='F3' || k==='Tab') e.preventDefault();
-  if (state==='inv') { if (k==='KeyE' || k==='Escape') closeUI(); return; }
+  if (state==='inv') { if (k==='KeyE' || k==='Escape' || (k==='KeyT' && ui && ui.type==='trade')) closeUI(); return; }
   if (state!=='play') { if (k==='Escape' && state==='pause') resume(); return; }
   if (!keys[k]) {
     if (k==='KeyW') { const now=performance.now(); if (now-lastWTap<300) P.sprint=true; lastWTap=now; }
     if (k==='Space' && P.mode==='creative') { const now=performance.now(); if (now-lastSpaceTap<300) { P.flying=!P.flying; P.vel.y=0; } lastSpaceTap=now; }
     if (k.startsWith('Digit')) { const n=+k.slice(5); if (n>=1&&n<=9){ P.sel=n-1; refreshHUD(); showItemName(); } }
     if (k==='KeyE') { openUI('inv'); document.exitPointerLock && document.exitPointerLock(); }
+    if (k==='KeyT' && tradeNearest()) { keys[k] = false; return; }
     if (k==='F5') view=(view+1)%3;
     if (k==='F1') { e.preventDefault(); const hud=$('hud'); hud.style.visibility = hud.style.visibility==='hidden' ? '' : 'hidden'; handGroup.userData.hidden = hud.style.visibility==='hidden'; }
     if (k==='F2') { e.preventDefault(); renderer.render(scene, camera); const a=document.createElement('a'); a.href=canvas.toDataURL('image/png'); a.download='blockhaven-'+new Date().toISOString().replace(/[:.]/g,'-')+'.png'; a.click(); showMsg('Saved screenshot'); Sound.play('click'); }
@@ -966,7 +996,7 @@ const OPT_LABEL = { render: v=>`Render Distance: ${v} chunks`, fov: v=>`FOV: ${v
 function renderOptions(){ document.querySelectorAll('.slider').forEach(sl => { const k=sl.dataset.opt, inp=sl.querySelector('input'); inp.min=sl.dataset.min; inp.max=sl.dataset.max; inp.step=sl.dataset.step; inp.value=OPT[k];
   const upd=()=>{ const v=+inp.value; OPT[k]=v; sl.querySelector('.lab').textContent=OPT_LABEL[k](v); const f=(v-inp.min)/(inp.max-inp.min); sl.querySelector('.knob').style.left=`calc(${f*100}% - ${f*16}px)`;
     if (k==='fov') { camera.fov=v; camera.updateProjectionMatrix(); } if (k==='vol') Sound.setVol(v/100); }; inp.oninput=upd; upd(); }); }
-const SPLASHES = ['Also try caves!','100% hand-drawn pixels!','Infinite-ish!','Now with lava!','Punch trees!','Sounds made in code!','Watch out at night!','Seeded!','Diamonds below!','Now with farming!','Sleep through the night!','Mind the Fuselings!','3D clouds!','Climb ladders!','Rain and snow!','Visit the Nether!','Find a village!','Tame a wolf!','Jungles and badlands!','Collect XP!','Trade with villagers!','Enchant your tools!','Raid a dungeon!','Thunderstorms!','Desert temples!','Now with armor!'];
+const SPLASHES = ['Also try caves!','100% hand-drawn pixels!','Infinite-ish!','Now with lava!','Punch trees!','Sounds made in code!','Watch out at night!','Seeded!','Diamonds below!','Now with farming!','Sleep through the night!','Mind the Fuselings!','3D clouds!','Climb ladders!','Rain and snow!','Visit the Nether!','Find a village!','Tame a wolf!','Jungles and badlands!','Collect XP!','Trade with villagers!','Enchant your tools!','Raid a dungeon!','Thunderstorms!','Desert temples!','Now with armor!','Blossom groves!','Frost spires!','Mind the Frostlings!','Fungal meadows!'];
 { const logo = document.querySelector('h1.logo'); const c = iconCanvas(B.STONE); const big=document.createElement('canvas'); big.width=big.height=64; const bx=big.getContext('2d'); bx.imageSmoothingEnabled=false; bx.drawImage(c,0,0,64,64);
   Object.assign(logo.style, { backgroundImage:`url(${big.toDataURL()})`, backgroundSize:'64px 64px', webkitBackgroundClip:'text', backgroundClip:'text', color:'transparent', textShadow:'none', filter:'drop-shadow(3px 3px 0 #555) drop-shadow(3px 3px 0 #222) drop-shadow(0 0 2px #000)', imageRendering:'pixelated' });
   const dirt = iconCanvas(B.DIRT); const db=document.createElement('canvas'); db.width=db.height=64; const dx=db.getContext('2d'); dx.imageSmoothingEnabled=false; dx.drawImage(dirt,0,0,64,64); dx.fillStyle='rgba(0,0,0,0.6)'; dx.fillRect(0,0,64,64);
@@ -996,6 +1026,7 @@ function updatePlayer(dt) {
   let speed = fly ? (P.sprint?21:10.9) : P.sneak ? 1.3 : P.sprint ? 5.6 : 4.3;
   if (P.inWater && !fly) speed *= 0.5;
   if (P.eating) speed *= 0.3;
+  if (P.chillT > 0) { P.chillT -= dt; speed *= 0.55; } // a frostling's hit leaves you chilled and slow for a moment
   const acc = fly ? 6 : P.onGround ? 14 : 3;
   P.vel.x += (wx*speed - P.vel.x)*Math.min(1, dt*acc); P.vel.z += (wz*speed - P.vel.z)*Math.min(1, dt*acc);
   if (fly) { let vy=0; if (keys.Space) vy+=8; if (keys.ShiftLeft) vy-=8; P.vel.y += (vy-P.vel.y)*Math.min(1,dt*10); }
@@ -1045,7 +1076,10 @@ function updatePlayer(dt) {
   // breaking
   const target = raycast(eyePos(), dirVec(), P.mode==='creative'?6:5);
   if (target) { selBox.visible = true; selBox.position.set(target.x+0.5, target.y+0.5, target.z+0.5); const r=BLOCKS[target.id].render; const sh = r==='cross'||r==='torch'?0.7 : BLOCKS[target.id].hgt ? BLOCKS[target.id].hgt : r==='bed'?(target.id===B.FARMLAND?0.9375:0.5625) : 1; selBox.scale.set(1, sh, 1); selBox.position.y -= (1-sh)/2; } else selBox.visible = false;
-  if ((mouseL || (AUTO && autoplay.breaking)) && target) {
+  // holding the attack button on a mob keeps swinging at it (once per cooldown) instead of mining the block behind it
+  P.atkCD = (P.atkCD || 0) - dt; const aimM = mouseL ? aimedMob() : null;
+  if (aimM) { if (P.atkCD <= 0) attack(); crackMesh.visible = false; breakTarget = null; breakT = 0; }
+  else if ((mouseL || (AUTO && autoplay.breaking)) && target) {
     const same = breakTarget && breakTarget.x===target.x && breakTarget.y===target.y && breakTarget.z===target.z;
     if (!same) { breakTarget = target; breakT = 0; }
     if (P.mode==='creative') { if (P.creativeCD <= 0) { finishBreak(target); P.creativeCD = 0.25; P.swing = 0.3; } }
@@ -1096,6 +1130,7 @@ function updateSky(dt) {
   else if (headB===B.WATER) ov = 'rgba(30,60,160,0.25)';
   else if (P.portalT > 0) ov = `rgba(140,40,220,${Math.min(0.7, P.portalT/3*0.7)})`;
   else if (P.inLava) ov = 'rgba(255,90,0,0.5)';
+  else if (P.chillT > 0) ov = `radial-gradient(ellipse at center, rgba(180,220,255,0) 50%, rgba(170,215,255,${Math.min(0.5, P.chillT*0.18)}))`;
   overlay.style.background = ov;
 }
 function updateCamera() {
@@ -1166,7 +1201,7 @@ function frame() {
     world.tickFluids(dt); mobs.update(dt); updateDrops(dt); updateFurnaces(dt); randomTicks(dt); updateWeather(dt); updateOrbs(dt); Sound.updateMusic(dt, daylight() < 0.35);
     saveT += dt; if (saveT > 30) { saveT = 0; saveWorld(); }
   }
-  updateChunks(state==='play'?8:4); updateSky(dt); updateCamera(); updateHand(); updateDebug();
+  updateChunks(state==='play'?8:4); updateSky(dt); updateCamera(); updateHand(); updateDebug(); updateTradeBtn();
   liqT += dt; if (liqT > 0.12) { liqT = 0; animateLiquids(performance.now()/1000); atlasTex.needsUpdate = true; }
   { const s = held(); const el = $('itemname');
     if (s && s.id===I.COMPASS && state==='play') { const dx = P.spawn.x-P.pos.x, dz = P.spawn.z-P.pos.z; const ang = Math.atan2(-dx,-dz) - P.yaw; const dirs = ['↑','↖','←','↙','↓','↘','→','↗']; const k = ((Math.round(ang/(Math.PI/4))%8)+8)%8;
@@ -1203,13 +1238,13 @@ function boot() {
     if (Q.get('time')==='night') timeOfDay = 0.62; else if (Q.get('time')==='sunset') timeOfDay = 0.47; else if (Q.get('time')) timeOfDay = +Q.get('time');
     if (Q.get('view')) view = +Q.get('view');
     if (Q.get('weather')) { weather.raining = true; weather.amt = 1; weather.t = 999; weather.storm = Q.get('weather')==='storm'; weather.boltT = 0.3; }
-    if (Q.get('find')) { const want = +Q.get('find'); outer: for (let r=0;r<4000;r+=48) for (let a=0;a<6.28;a+=0.4) { const x=Math.round(Math.cos(a)*r), z=Math.round(Math.sin(a)*r); if (world.col(x,z).biome===want) { P.pos.set(x+0.5, world.col(x,z).h+1.01, z+0.5); P.needSpawn=true; break outer; } } }
+    if (Q.get('find')) { const want = +Q.get('find'); outer: for (let r=0;r<4000;r+=48) for (let a=0;a<6.28;a+=0.4) { const x=Math.round(Math.cos(a)*r), z=Math.round(Math.sin(a)*r); if (world.col(x,z).biome===want && (!Q.get('deep') || [[20,0],[-20,0],[0,20],[0,-20]].every(([a,b])=>world.col(x+a,z+b).biome===want))) { P.pos.set(x+0.5, world.col(x,z).h+1.01, z+0.5); P.needSpawn=true; break outer; } } }
     if (Q.get('village')) { let best=null; for (let r=0;r<6&&!best;r++) for (let rx=-r;rx<=r;rx++) for (let rz=-r;rz<=r;rz++) { const v=world.village(rx,rz); if (v && v.houses.length>=3 && !best) best=v; }
       if (best) { P.pos.set(best.x+0.5, best.h+1.01, best.z+7.5); P.needSpawn = true; P.yaw = 0; window.__vil = best; } }
     if (Q.get('fly')) { P.mode='creative'; P.flying=true; P.needSpawn=false; P.pos.y += +Q.get('fly'); }
     afterLoadHook = () => {
       if (Q.get('time')==='night') { for (let i=0;i<6;i++){ const a=i/6*6.28; mobs.spawn(['zombie','skeleton','spider','fuseling','slime','ember'][i], P.pos.x+Math.cos(a)*7, P.pos.y+1, P.pos.z+Math.sin(a)*7); } }
-      else if (Q.get('mobshow')) { const types = Q.get('mobshow')==='2' ? ['cow','pig','sheep','chicken','rabbit','wolf','villager','squid'] : ['zombie','skeleton','spider','fuseling','villager','golem','wolf','slime']; types.forEach((t,i)=>{ let m; let tries=0; do { if (m) { scene.remove(m.model.g); mobs.list.pop(); } m = mobs.spawn(t, P.pos.x-5.5+i*1.6, P.pos.y+0.2, P.pos.z-5); } while (t==='zombie' && !m.armorPts && tries++<30); m.ai.t = 999; }); P.peace = true; }
+      else if (Q.get('mobshow')) { const types = Q.get('mobshow')==='2' ? ['cow','pig','sheep','chicken','rabbit','wolf','villager','squid'] : Q.get('mobshow')==='3' ? ['deer','capling','frostling','deer','capling','frostling'] : ['zombie','skeleton','spider','fuseling','villager','golem','wolf','slime']; types.forEach((t,i)=>{ let m; let tries=0; do { if (m) { scene.remove(m.model.g); mobs.list.pop(); } m = mobs.spawn(t, P.pos.x-5.5+i*1.6, P.pos.y+0.2, P.pos.z-5); } while (t==='zombie' && !m.armorPts && tries++<30); m.ai.t = 999; }); P.peace = true; }
       else if (Q.get('wolves')) { for (let i=0;i<3;i++) { const w = mobs.spawn('wolf', P.pos.x+2+i, P.pos.y+0.5, P.pos.z-4); if (i<2) { w.tamed = true; w.model.g.userData.collar.visible = true; } } }
       else { for (let i=0;i<4;i++){ const a=i/4*6.28+0.5; const x=P.pos.x+Math.cos(a)*6, z=P.pos.z-6+Math.sin(a)*3; const y=world.col(Math.floor(x),Math.floor(z)).h+1; mobs.spawn(['cow','pig','sheep','chicken'][i], x, y+0.5, z); } }
       if (Q.get('cave')) findCave();
@@ -1261,6 +1296,21 @@ function boot() {
           const before = cnt(); decayBoost = 20; for (let i=0;i<5;i++) { rtT = 0.2; randomTicks(0.2); } decayBoost = 0; showMsg('chopped '+n+' logs; leaves nearby '+before+' -> '+cnt()); msgT=999; P.pos.set(tr[0]+0.5, tr[1], tr[2]+6.5); P.yaw=0; P.pitch=0.2; P.needSpawn=false; } }
       if (Q.get('trade')) { const v = mobs.spawn('villager', P.pos.x, P.pos.y, P.pos.z-3); v.job = Q.get('trade')==='1' ? 'Smith' : Q.get('trade'); P.inv[18]={id:I.EMERALD,count:9}; P.inv[19]={id:I.COAL,count:30}; openTrade(v);
         if (Q.get('tclick')) { const e0 = countItem(I.EMERALD), c0 = countItem(I.COAL); invPanel.querySelector('.trade[data-t="0"]').click(); invPanel.querySelector('.trade[data-t="2"]').click(); setTimeout(()=>{ showMsg('emeralds '+e0+'->'+countItem(I.EMERALD)+' coal '+c0+'->'+countItem(I.COAL)+' iron picks '+countItem(I.IPICK)); msgT=999; },100); } }
+      if (Q.get('spawn')) { const [t, n] = Q.get('spawn').split(','); for (let i=0;i<(+n||3);i++) { const a = -0.9 + i*0.6, x = P.pos.x - Math.sin(P.yaw+a)*(5+i%2*2), z = P.pos.z - Math.cos(P.yaw+a)*(5+i%2*2); const m = mobs.spawn(t, x, world.col(Math.floor(x),Math.floor(z)).h+1.2, z); m.yaw = Math.atan2(P.pos.x-x, P.pos.z-z); m.ai.t = 999; } P.peace = true; }
+      if (Q.get('tradebtn')) { const v = mobs.spawn('villager', P.pos.x+1.2, P.pos.y+0.2, P.pos.z-2.6); v.job = 'Mason'; v.ai.t = 999; P.inv[18]={id:I.EMERALD,count:12}; P.inv[19]={id:B.COBBLE,count:40}; P.inv[20]={id:I.FROST_SHARD,count:12}; P.yaw = -0.4; P.pitch = -0.15;
+        if (Q.get('tradebtn')==='2') setTimeout(() => { tradeBtn.click(); setTimeout(() => { const ok = ui && ui.type==='trade'; closeUI(); showMsg('button opened trade: '+ok+' · after close state='+state+' btn shown='+tradeBtn.classList.contains('on')); msgT=999; }, 300); }, 400);
+        if (Q.get('tradebtn')==='3') setTimeout(() => tradeBtn.click(), 400); }
+      if (Q.get('testattack')) { const out=[]; P.vel.set(0,0,0); P.inv[0]={id:I.WSWORD,count:1,dur:59}; P.sel=0; P.mode='survival'; P.flying=false;
+        const x=Math.floor(P.pos.x), z=Math.floor(P.pos.z), gy=Math.floor(P.pos.y);
+        for (let k=1;k<=4;k++) { for (let yy=gy; yy<gy+3; yy++) world.setBlock(x,yy,z-k,B.AIR,0,true); world.setBlock(x,gy-1,z-k,B.GRASS,0,true); }
+        world.setBlock(x,gy,z-1,B.TALLGRASS,0,true); world.setBlock(x,gy,z-2,B.TALLGRASS,0,true); world.relightAround(x>>4,z>>4); rebuildNow(x,z);
+        const t = Q.get('testattack')==='2' ? 'villager' : 'pig'; const m = mobs.spawn(t, x+0.5, gy, z-2.4); m.ai.t = 999; P.pos.x = x+0.5; P.pos.z = z+0.5;
+        const e = eyePos(); const dx=m.pos.x-e.x, dy=(m.pos.y+m.h*0.45)-e.y, dz=m.pos.z-e.z; P.yaw=Math.atan2(-dx,-dz); P.pitch=Math.atan2(dy, Math.hypot(dx,dz));
+        out.push(t+' tcAimMob='+window.__tcAimMob()); const oldHit = (() => { const mh = mobs.raycast(e, dirVec(), 3.5), bh = raycast(e, dirVec(), 5); return !!(mh && (!bh || bh.dist > mh.dist)); })(); out.push('old test would hit='+oldHit);
+        if (t==='pig') { const hp0=m.hp; const r1=attack(); out.push('click hit='+r1+' hp '+hp0+'->'+m.hp+' knock '+Math.hypot(m.vel.x,m.vel.z).toFixed(1)+' up '+m.vel.y.toFixed(1)+' red='+(m.hurtT>0));
+          m.vel.set(0,0,0); mouseL = true; const hp1=m.hp, g0 = world.getBlock(x,gy,z-1); autoplay.f = 0; for (let i=0;i<20;i++) updatePlayer(0.05); mouseL = false; breakT = 0; breakTarget = null;
+          out.push('held 1s hp '+hp1+'->'+m.hp+' grass kept='+(world.getBlock(x,gy,z-1)===g0)); }
+        showMsg(out.join(' | ')); msgT = 999; }
       if (Q.get('compass')) { P.inv[0] = {id: Q.get('compass')==='clock' ? I.CLOCK : I.COMPASS, count:1}; P.sel = 0; P.spawn = P.pos.clone().add(new THREE.Vector3(-40,0,30)); refreshHUD(); }
       if (Q.get('enchant')) { addXP(400); openUI('enchant'); ui.ench[0] = {id:I.DPICK,count:1,dur:1561}; ui.ench[1] = {id:I.LAPIS,count:12}; P.inv[22] = {id:I.ISWORD,count:1,dur:250,ench:3}; P.inv[23] = {id:I.ICHEST,count:1,dur:360,ench:2};
         if (Q.get('enchant')==='2') { invPanel.querySelector('.ench[data-k="3"]').click(); }
