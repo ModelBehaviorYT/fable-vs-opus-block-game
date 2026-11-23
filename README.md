@@ -1,6 +1,6 @@
 # Claude Fable 5.2 vs Opus 5.5 made a block-building survival game
 
-Claude Fable 5.2 and Claude Opus 5.5 got the same prompt and the same time to make a block-building survival game. Play both in your browser. Every file here was written by the AI.
+Claude Fable 5.2 and Claude Opus 5.5 got the same prompt and the same time to make a block-building survival game. Play both in your browser. Every file in `fable/` and `opus/` was written by the AI. The phone controls in [`touch.js`](touch.js) were added by us after the video (see below).
 
 Watch the video: https://youtu.be/jFr2s1PYAnc
 
@@ -16,7 +16,17 @@ Play page: https://modelbehavioryt.github.io/fable-vs-opus-block-game/
 
 Controls: WASD to move, mouse to look, Space to jump, left click to break, right click to place.
 
-To run one locally, serve the folder over http (for example `npx serve fable`) and open it in Chrome.
+Phone and tablet: turn the phone sideways. Left thumb moves (push all the way up to sprint), right thumb drags to look, tap to
+place or use, hold to break. Buttons for Jump, Use, Sneak, Bag and pause; tap the hotbar to pick a slot.
+
+## Phone controls (added after the video)
+
+Neither model was asked for touch controls, so a viewer on a phone couldn't play. [`touch.js`](touch.js) adds them without
+changing either game's code: it turns touches into the keyboard and mouse events the games already use, and shrinks the menus
+to fit a phone screen. With a mouse and keyboard it stays switched off, so desktop play is exactly as the models made it. The
+only change inside `fable/` and `opus/` is one `<script>` line in each `index.html`.
+
+To run one locally, serve the whole folder over http (for example `npx serve .`) and open `/fable/` or `/opus/` in Chrome.
 
 ## How the test worked
 
