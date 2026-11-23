@@ -18,6 +18,13 @@
   let vp = document.querySelector('meta[name=viewport]');
   if (!vp) { vp = document.createElement('meta'); vp.name = 'viewport'; document.head.appendChild(vp); }
   vp.content = 'width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover';
+  // iPhone Safari has no fullscreen for web pages. "Add to Home Screen" opens the game without any browser bars.
+  for (const [n, c] of [['apple-mobile-web-app-capable', 'yes'], ['mobile-web-app-capable', 'yes'],
+                        ['apple-mobile-web-app-status-bar-style', 'black-translucent']]) {
+    if (!document.querySelector(`meta[name="${n}"]`)) {
+      const m = document.createElement('meta'); m.name = n; m.content = c; document.head.appendChild(m);
+    }
+  }
 
   // ---------- pointer lock shim (only fakes it in touch mode) ----------
   const protoReq = Element.prototype.requestPointerLock;
